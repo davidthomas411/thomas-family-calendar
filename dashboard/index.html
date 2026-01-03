@@ -8,66 +8,26 @@
 </head>
 <body>
   <div id="sky">
-    <svg class="cloud-filter" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <filter id="cloud-filter" x="-50%" y="-50%" width="200%" height="200%" style="color-interpolation-filters:sRGB">
-        <feTurbulence type="fractalNoise" seed="462" baseFrequency="0.011" numOctaves="5" result="noise1" />
-        <feTurbulence type="fractalNoise" seed="462" baseFrequency="0.011" numOctaves="2" result="noise2" />
-        <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="blur1" />
-        <feDisplacementMap in="blur1" scale="100" in2="noise1" result="cloud1" />
-        <feFlood id="shadow2" flood-color="rgb(215,215,215)" flood-opacity="0.2" />
-        <feComposite operator="in" in2="SourceGraphic" />
-        <feOffset dx="-10" dy="-3" />
-        <feMorphology radius="20" />
-        <feGaussianBlur stdDeviation="20" />
-        <feDisplacementMap scale="100" in2="noise1" result="cloud2" />
-        <feFlood id="shadow3" flood-color="rgb(66,105,146)" flood-opacity="0.2" />
-        <feComposite operator="in" in2="SourceGraphic" />
-        <feOffset dx="-10" dy="40" />
-        <feMorphology radius="0 40" />
-        <feGaussianBlur stdDeviation="20" />
-        <feDisplacementMap scale="80" in2="noise2" result="cloud3" />
-        <feFlood id="shadow4" flood-color="rgb(0,0,0)" flood-opacity="0.4" />
-        <feComposite operator="in" in2="SourceGraphic" />
-        <feOffset dx="20" dy="60" />
-        <feMorphology radius="0 65" />
-        <feGaussianBlur stdDeviation="30" />
-        <feDisplacementMap scale="100" in2="noise2" result="cloud4" />
-        <feFlood id="shadow5" flood-color="rgb(0,0,0)" flood-opacity="0.4" />
-        <feComposite operator="in" in2="SourceGraphic" />
-        <feOffset dx="20" dy="70" />
-        <feMorphology radius="0 200" />
-        <feGaussianBlur stdDeviation="30" />
-        <feDisplacementMap scale="100" in2="noise2" result="cloud5" />
-        <feMerge>
-          <feMergeNode in="cloud1" />
-          <feMergeNode in="cloud2" />
-          <feMergeNode in="cloud3" />
-          <feMergeNode in="cloud4" />
-          <feMergeNode in="cloud5" />
-        </feMerge>
-      </filter>
-    </svg>
-    <div id="clouds-back" class="cloud-layer back" aria-hidden="true"></div>
-    <div id="clouds-front" class="cloud-layer front" aria-hidden="true"></div>
-    <canvas id="rain" aria-hidden="true"></canvas>
     <div class="grain" aria-hidden="true"></div>
 
     <div class="dashboard">
       <main class="layout">
         <section class="primary">
-          <div class="time-block">
-            <div id="time" class="time">--:--</div>
-            <div id="date" class="date">---</div>
-            <div class="location">Bala Cynwyd, PA</div>
-          </div>
+          <div class="primary-header">
+            <div class="time-block">
+              <div id="time" class="time">--:--</div>
+              <div id="date" class="date">---</div>
+              <div class="location">Bala Cynwyd, PA</div>
+            </div>
 
-          <div class="weather-block" aria-live="polite">
-            <div id="weather-icon" class="weather-icon" aria-hidden="true"></div>
-            <div class="weather-meta">
-              <div id="temp" class="temp">--°</div>
-              <div id="condition" class="condition">Loading weather</div>
-              <div id="temp-range" class="temp-range">H --° / L --°</div>
-              <div id="precip" class="precip"></div>
+            <div class="weather-block" aria-live="polite">
+              <div id="weather-icon" class="weather-icon" aria-hidden="true"></div>
+              <div class="weather-meta">
+                <div id="temp" class="temp">--°</div>
+                <div id="condition" class="condition">Loading weather</div>
+                <div id="temp-range" class="temp-range">H --° / L --°</div>
+                <div id="precip" class="precip"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -77,12 +37,6 @@
             <div class="panel-title">Upcoming</div>
             <div id="upcoming-events" class="upcoming-list" aria-live="polite">
               <div class="calendar-status">Loading events...</div>
-            </div>
-          </div>
-          <div class="panel-section">
-            <div class="panel-title">Photos (placeholder)</div>
-            <div class="photo-placeholder">
-              Photo carousel will live here in Phase 2.
             </div>
           </div>
         </aside>
@@ -119,7 +73,6 @@
     </div>
   </div>
 
-  <script src="clouds.js"></script>
   <script src="weather.js"></script>
 </body>
 </html>

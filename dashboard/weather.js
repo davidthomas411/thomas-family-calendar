@@ -10,12 +10,11 @@
   const REFRESH_INTERVAL = 10 * 60 * 1000;
   const LETTER_DAY_CALENDAR_URL = "https://www.lmsd.org/cf_calendar/feed.cfm?type=ical&feedID=C1DAEC061C4640888E92DF232728EA82&isgmt=1";
   const SCHOOL_EVENTS_URL = "https://www.lmsd.org/calendar/calendar_584.ics";
-  // CORS proxy used if the direct calendar feed is blocked by the browser.
-  const SCHOOL_CALENDAR_PROXY = "https://r.jina.ai/http://";
+  // CORS-friendly proxy used if the direct calendar feed is blocked by the browser.
+  const SCHOOL_CALENDAR_PROXY = "https://api.allorigins.win/raw?url=";
   const SCHOOL_CALENDAR_REFRESH = 30 * 60 * 1000;
   const SCHOOL_CALENDAR_DAYS = 5;
   const SCHOOL_CALENDAR_MAX_EVENTS_PER_DAY = 4;
-  const UPCOMING_DAYS = 90;
   const UPCOMING_KEYWORDS = [
     "show",
     "concert",
@@ -401,8 +400,8 @@
       const meta = document.createElement("div");
       meta.className = "upcoming-meta";
       const dateLabel = `${formatWeekday(event.start)}, ${formatMonthDay(event.start)}`;
-      const timeLabel = event.allDay ? "All day" : formatEventTime(event.start);
-      meta.textContent = `${dateLabel} · ${timeLabel}`;
+      const timeLabel = event.allDay ? "" : formatEventTime(event.start);
+      meta.textContent = timeLabel ? `${dateLabel} · ${timeLabel}` : dateLabel;
 
       const title = document.createElement("div");
       title.className = "upcoming-title";
@@ -483,7 +482,7 @@
 
           const time = document.createElement("div");
           time.className = "week-event-time";
-          time.textContent = event.allDay ? "All day" : formatEventTime(event.start);
+          time.textContent = event.allDay ? "" : formatEventTime(event.start);
 
           const title = document.createElement("div");
           title.className = "week-event-title";
@@ -508,10 +507,7 @@
     });
   };
 
-  const toProxyUrl = (url) => {
-    const stripped = url.replace(/^https?:\/\//, "");
-    return `${SCHOOL_CALENDAR_PROXY}${stripped}`;
-  };
+  const toProxyUrl = (url) => `${SCHOOL_CALENDAR_PROXY}${encodeURIComponent(url)}`;
 
   const fetchCalendarText = async (url) => {
     const response = await fetch(url, { cache: "no-store" });
@@ -521,15 +517,27 @@
     return response.text();
   };
 
+  const isIcsPayload = (text) => typeof text === "string" && text.includes("BEGIN:VCALENDAR");
+
   const fetchIcs = async (url) => {
     try {
-      return await fetchCalendarText(url);
-    } catch (error) {
-      if (!SCHOOL_CALENDAR_PROXY) {
-        throw error;
+      const direct = await fetchCalendarText(url);
+      if (isIcsPayload(direct)) {
+        return direct;
       }
-      return fetchCalendarText(toProxyUrl(url));
+    } catch (error) {
+      // Fall through to proxy.
     }
+
+    if (!SCHOOL_CALENDAR_PROXY) {
+      throw new Error("Calendar fetch failed");
+    }
+
+    const proxied = await fetchCalendarText(toProxyUrl(url));
+    if (!isIcsPayload(proxied)) {
+      throw new Error("Calendar fetch failed");
+    }
+    return proxied;
   };
 
   const refreshCalendar = async () => {
@@ -544,8 +552,8 @@
       const weekStart = getSchoolWeekStart(now);
       const rangeEnd = new Date(weekStart);
       rangeEnd.setDate(rangeEnd.getDate() + SCHOOL_CALENDAR_DAYS);
-      const upcomingEnd = new Date(today);
-      upcomingEnd.setDate(upcomingEnd.getDate() + UPCOMING_DAYS);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
       if (upcomingEl) {
         setCalendarStatus(upcomingEl, "Loading events...");
@@ -590,10 +598,13 @@
             return start ? { ...event, start } : null;
           })
           .filter(Boolean)
-          .filter((event) => matchesUpcomingKeyword(event.summary))
           .forEach((event) => {
-            if (event.start >= today && event.start < upcomingEnd) {
+            const isUpcomingMatch = matchesUpcomingKeyword(event.summary);
+            if (isUpcomingMatch && event.start >= monthStart && event.start < monthEnd) {
               upcomingEvents.push(event);
+            }
+            if (!isUpcomingMatch) {
+              return;
             }
             if (event.start < weekStart || event.start >= rangeEnd) {
               return;
@@ -726,7 +737,7 @@
       time.className = "person-time";
       const eventKey = dayKey(event.start);
       if (event.allDay) {
-        time.textContent = eventKey === todayKey ? "All day" : `${formatWeekday(event.start)} all day`;
+        time.textContent = eventKey === todayKey ? "" : formatWeekday(event.start);
       } else if (eventKey === todayKey) {
         time.textContent = formatEventTime(event.start);
       } else {

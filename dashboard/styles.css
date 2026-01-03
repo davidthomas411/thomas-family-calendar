@@ -72,9 +72,13 @@ body {
   z-index: 5;
   height: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
+  align-content: start;
   gap: clamp(14px, 2.5vw, 26px);
   padding: clamp(20px, 3.5vw, 50px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .safari-lite .cloud-shape {
@@ -147,16 +151,26 @@ canvas {
   display: grid;
   grid-template-columns: minmax(0, 2.4fr) minmax(260px, 1fr);
   gap: clamp(24px, 4vw, 56px);
-  align-items: stretch;
-  min-height: 0;
+  align-items: start;
 }
 
 .primary {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 0;
+  justify-content: flex-start;
+  gap: clamp(22px, 3.2vw, 40px);
   padding-right: clamp(12px, 2vw, 32px);
+}
+
+.primary-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(16px, 3vw, 36px);
+  align-items: start;
+}
+
+.primary-header .weather-block {
+  align-self: start;
 }
 
 .time-block {
@@ -493,18 +507,25 @@ canvas {
   line-height: 1.35;
 }
 
-.photo-placeholder {
-  height: clamp(120px, 16vw, 180px);
-  border-radius: 22px;
-  border: 1px dashed rgba(255, 255, 255, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 16px;
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.4;
+.upcoming-title,
+.week-event-title,
+.week-event-empty,
+.person-task,
+.person-empty,
+.calendar-status,
+.condition,
+.temp-range,
+.precip {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.week-event-time:empty {
+  display: none;
+}
+
+.person-time:empty {
+  visibility: hidden;
 }
 
 @supports (backdrop-filter: blur(8px)) {
@@ -516,8 +537,75 @@ canvas {
   }
 }
 
+@media (max-width: 1400px), (max-height: 900px) {
+  .dashboard {
+    grid-template-rows: auto auto auto;
+    padding: clamp(16px, 2.8vw, 32px);
+    gap: clamp(12px, 2vw, 20px);
+  }
+
+  .primary {
+    justify-content: flex-start;
+    gap: clamp(20px, 3vw, 32px);
+  }
+
+  .time {
+    font-size: clamp(2.6rem, 5.4vw, 6rem);
+  }
+
+  .side-panel {
+    padding: clamp(14px, 2vw, 20px);
+    gap: 16px;
+  }
+
+  .upcoming-list {
+    max-height: clamp(180px, 28vh, 260px);
+  }
+
+  .weather-block {
+    padding: 12px 18px;
+    gap: 12px;
+    border-radius: 18px;
+  }
+
+  .weather-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .temp {
+    font-size: clamp(1.5rem, 2.3vw, 2.2rem);
+  }
+
+  .condition {
+    font-size: clamp(0.85rem, 1.2vw, 1.05rem);
+  }
+
+  .temp-range,
+  .precip {
+    font-size: 0.85rem;
+  }
+
+  .family-strip,
+  .calendar-strip {
+    padding: clamp(12px, 2vw, 18px);
+  }
+
+  .calendar-grid {
+    gap: 10px;
+  }
+
+  .week-day {
+    min-height: 92px;
+  }
+}
+
 @media (max-width: 980px) {
   .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-header {
     grid-template-columns: 1fr;
   }
 
