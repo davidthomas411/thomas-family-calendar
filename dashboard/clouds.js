@@ -12,11 +12,56 @@
   const shadow4 = document.getElementById("shadow4");
   const shadow5 = document.getElementById("shadow5");
 
-  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const userAgent = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+  const isSafari = /Safari/.test(userAgent) && !/Chrome|Chromium|Edg|OPR|CriOS|FxiOS/.test(userAgent);
+  const useLiteMode = isIOS || isSafari;
+  if (useLiteMode) {
+    document.documentElement.classList.add("safari-lite");
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches || useLiteMode;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const rand = (min, max) => min + Math.random() * (max - min);
   const lerp = (start, end, t) => start + (end - start) * t;
+  const cloudConfig = useLiteMode
+    ? {
+        back: {
+          count: 6,
+          speed: 3.4,
+          opacity: 0.5,
+          scaleRange: [0.85, 1.05],
+          yRange: [0.06, 0.45],
+          sizeRange: [200, 360],
+        },
+        front: {
+          count: 4,
+          speed: 5.2,
+          opacity: 0.7,
+          scaleRange: [0.9, 1.15],
+          yRange: [0.18, 0.68],
+          sizeRange: [260, 460],
+        },
+      }
+    : {
+        back: {
+          count: 9,
+          speed: 4.8,
+          opacity: 0.5,
+          scaleRange: [0.85, 1.1],
+          yRange: [0.05, 0.5],
+          sizeRange: [240, 420],
+        },
+        front: {
+          count: 6,
+          speed: 7.4,
+          opacity: 0.75,
+          scaleRange: [0.9, 1.25],
+          yRange: [0.15, 0.72],
+          sizeRange: [320, 560],
+        },
+      };
 
   class CloudLayer {
     constructor(container, options) {
@@ -223,22 +268,8 @@
   class SkyScene {
     constructor() {
       this.layers = [
-        new CloudLayer(backLayer, {
-          count: 9,
-          speed: 4.8,
-          opacity: 0.5,
-          scaleRange: [0.85, 1.1],
-          yRange: [0.05, 0.5],
-          sizeRange: [240, 420],
-        }),
-        new CloudLayer(frontLayer, {
-          count: 6,
-          speed: 7.4,
-          opacity: 0.75,
-          scaleRange: [0.9, 1.25],
-          yRange: [0.15, 0.72],
-          sizeRange: [320, 560],
-        }),
+        new CloudLayer(backLayer, cloudConfig.back),
+        new CloudLayer(frontLayer, cloudConfig.front),
       ];
       this.rain = new RainField(rainCanvas);
       this.lastFrame = 0;
