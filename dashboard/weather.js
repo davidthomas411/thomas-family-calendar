@@ -55,6 +55,8 @@
   }
 
   const root = document.documentElement;
+  const skyEl = document.getElementById("sky");
+  const moonEl = document.getElementById("moon");
 
   const DAY_NAMES = [
     "Sunday",
@@ -117,6 +119,139 @@
   };
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const MOON_EPOCH = Date.UTC(2000, 0, 6, 18, 14);
+  const SYNODIC_MONTH = 29.530588853;
+  let lastMoonKey = "";
+  let lastMoonSize = 0;
+
+  const moonPhase = (date) => {
+    const utcTime = Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds()
+    );
+    const daysSince = (utcTime - MOON_EPOCH) / 86400000;
+    let phase = (daysSince % SYNODIC_MONTH) / SYNODIC_MONTH;
+    if (phase < 0) {
+      phase += 1;
+    }
+    return phase;
+  };
+
+  const moonIllumination = (phase) => 0.5 * (1 - Math.cos(2 * Math.PI * phase));
+
+  const moonOverlapArea = (distance, radius) => {
+    if (distance <= 0) {
+      return Math.PI * radius * radius;
+    }
+    if (distance >= 2 * radius) {
+      return 0;
+    }
+    const part = 2 * radius * radius * Math.acos(distance / (2 * radius));
+    const part2 = (distance / 2) * Math.sqrt(4 * radius * radius - distance * distance);
+    return part - part2;
+  };
+
+  const moonShadowOffset = (illumination, radius) => {
+    if (illumination <= 0.01) {
+      return 0;
+    }
+    if (illumination >= 0.99) {
+      return 2 * radius;
+    }
+    const target = Math.PI * radius * radius * (1 - illumination);
+    let low = 0;
+    let high = 2 * radius;
+    for (let i = 0; i < 24; i += 1) {
+      const mid = (low + high) / 2;
+      const area = moonOverlapArea(mid, radius);
+      if (area > target) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    return (low + high) / 2;
+  };
+
+  const drawMoon = (date) => {
+    if (!moonEl) {
+      return;
+    }
+
+    const rect = moonEl.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height);
+    if (!size) {
+      return;
+    }
+
+    const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    if (key === lastMoonKey && Math.abs(size - lastMoonSize) < 0.5) {
+      return;
+    }
+
+    const ratio = window.devicePixelRatio || 1;
+    const pixelSize = Math.max(1, Math.round(size * ratio));
+    if (moonEl.width !== pixelSize || moonEl.height !== pixelSize) {
+      moonEl.width = pixelSize;
+      moonEl.height = pixelSize;
+    }
+
+    const ctx = moonEl.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+
+    const radius = size * 0.46;
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.clip();
+
+    const surface = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.15, 0, 0, radius);
+    surface.addColorStop(0, "rgba(255, 255, 255, 0.98)");
+    surface.addColorStop(0.55, "rgba(218, 228, 242, 0.94)");
+    surface.addColorStop(1, "rgba(150, 170, 200, 0.88)");
+    ctx.fillStyle = surface;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    const craters = [
+      { x: -0.18, y: -0.12, r: 0.08, a: 0.22 },
+      { x: 0.16, y: -0.04, r: 0.06, a: 0.2 },
+      { x: 0.12, y: 0.2, r: 0.07, a: 0.18 },
+      { x: -0.06, y: 0.22, r: 0.05, a: 0.18 },
+    ];
+    craters.forEach((spot) => {
+      ctx.fillStyle = `rgba(170, 182, 204, ${spot.a})`;
+      ctx.beginPath();
+      ctx.arc(spot.x * radius, spot.y * radius, spot.r * radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    const phase = moonPhase(date);
+    const illumination = moonIllumination(phase);
+    if (illumination < 0.99) {
+      const offset = moonShadowOffset(illumination, radius);
+      const shadowX = phase <= 0.5 ? -offset : offset;
+      ctx.fillStyle = "rgba(10, 18, 30, 0.72)";
+      ctx.beginPath();
+      ctx.arc(shadowX, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    lastMoonKey = key;
+    lastMoonSize = size;
+  };
 
   const hexToRgb = (hex) => {
     const cleaned = hex.replace("#", "");
@@ -552,8 +687,10 @@
       const weekStart = getSchoolWeekStart(now);
       const rangeEnd = new Date(weekStart);
       rangeEnd.setDate(rangeEnd.getDate() + SCHOOL_CALENDAR_DAYS);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const nextWeekStart = new Date(weekStart);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+      const upcomingEnd = new Date(nextWeekStart);
+      upcomingEnd.setDate(upcomingEnd.getDate() + 30);
 
       if (upcomingEl) {
         setCalendarStatus(upcomingEl, "Loading events...");
@@ -600,7 +737,7 @@
           .filter(Boolean)
           .forEach((event) => {
             const isUpcomingMatch = matchesUpcomingKeyword(event.summary);
-            if (isUpcomingMatch && event.start >= monthStart && event.start < monthEnd) {
+            if (isUpcomingMatch && event.start >= nextWeekStart && event.start < upcomingEnd) {
               upcomingEvents.push(event);
             }
             if (!isUpcomingMatch) {
@@ -994,7 +1131,9 @@
     const topBase = hexToRgb(palette.top);
     const bottomBase = hexToRgb(palette.bottom);
     const glowBase = hexToRgb(palette.glow);
-    const cloudMix = clamp(cloudCover * 0.65, 0, 0.7);
+    const cloudMix = phase === "night"
+      ? clamp(cloudCover * 0.35, 0, 0.4)
+      : clamp(cloudCover * 0.65, 0, 0.7);
 
     const top = mixRgb(topBase, overcast, cloudMix);
     const bottom = mixRgb(bottomBase, overcast, cloudMix * 0.8);
@@ -1002,8 +1141,9 @@
 
     root.style.setProperty("--sky-top", rgbToString(top));
     root.style.setProperty("--sky-bottom", rgbToString(bottom));
-    root.style.setProperty("--sky-glow", rgbaToString(glow, phase === "night" ? 0.25 : 0.6));
-    root.style.setProperty("--haze", phase === "night" ? "rgba(64, 86, 125, 0.2)" : "rgba(255, 255, 255, 0.22)");
+    const isNightScene = phase === "night" || phase === "dusk";
+    root.style.setProperty("--sky-glow", rgbaToString(glow, isNightScene ? 0.25 : 0.6));
+    root.style.setProperty("--haze", isNightScene ? "rgba(18, 28, 58, 0.18)" : "rgba(255, 255, 255, 0.22)");
 
     const luma = getLuma(bottom);
     const useDarkText = luma > 0.68;
@@ -1028,8 +1168,8 @@
       useDarkText ? "rgba(5, 16, 32, 0.2)" : "rgba(0, 0, 0, 0.45)"
     );
 
-    root.style.setProperty("--sky-glow-x", phase === "night" ? "76%" : "70%");
-    root.style.setProperty("--sky-glow-y", phase === "night" ? "16%" : "20%");
+    root.style.setProperty("--sky-glow-x", isNightScene ? "76%" : "70%");
+    root.style.setProperty("--sky-glow-y", isNightScene ? "16%" : "20%");
 
     const cloudHighlightBase = hexToRgb("#ffffff");
     const cloudCoreBase = hexToRgb("#f2f6ff");
@@ -1052,6 +1192,13 @@
     root.style.setProperty("--cloud-highlight", rgbToString(cloudHighlight));
     root.style.setProperty("--cloud-core", rgbToString(cloudCore));
     root.style.setProperty("--cloud-shadow", rgbToString(cloudShadow));
+
+    if (skyEl) {
+      skyEl.classList.toggle("night", isNightScene);
+    }
+    if (isNightScene) {
+      drawMoon(new Date());
+    }
   };
 
   const iconForCondition = (condition, isDay) => {
@@ -1143,6 +1290,16 @@
       }
     }
   };
+
+  if (moonEl) {
+    window.addEventListener("resize", () => {
+      lastMoonKey = "";
+      lastMoonSize = 0;
+      if (skyEl && skyEl.classList.contains("night")) {
+        drawMoon(new Date());
+      }
+    });
+  }
 
   updateClock();
   setInterval(updateClock, 1000);

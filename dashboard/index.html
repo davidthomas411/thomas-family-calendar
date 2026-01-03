@@ -8,6 +8,8 @@
 </head>
 <body>
   <div id="sky">
+    <div class="sky-stars" aria-hidden="true"></div>
+    <canvas id="moon" class="moon" aria-hidden="true"></canvas>
     <div class="grain" aria-hidden="true"></div>
 
     <div class="dashboard">
@@ -31,16 +33,16 @@
             </div>
           </div>
         </section>
-
-        <aside class="side-panel">
-          <div class="panel-section">
-            <div class="panel-title">Upcoming</div>
-            <div id="upcoming-events" class="upcoming-list" aria-live="polite">
-              <div class="calendar-status">Loading events...</div>
-            </div>
-          </div>
-        </aside>
       </main>
+
+      <aside class="side-panel">
+        <div class="panel-section">
+          <div class="panel-title">Upcoming</div>
+          <div id="upcoming-events" class="upcoming-list" aria-live="polite">
+            <div class="calendar-status">Loading events...</div>
+          </div>
+        </div>
+      </aside>
 
       <section class="family-strip">
         <div class="panel-title">Family</div>
@@ -52,14 +54,6 @@
           <div class="person-card">
             <div class="person-name">Lorna</div>
             <div class="person-items" data-person="lorna" aria-live="polite"></div>
-          </div>
-          <div class="person-card">
-            <div class="person-name">Katherine</div>
-            <div class="person-items" data-person="katherine" aria-live="polite"></div>
-          </div>
-          <div class="person-card">
-            <div class="person-name">Alistair</div>
-            <div class="person-items" data-person="alistair" aria-live="polite"></div>
           </div>
         </div>
       </section>
