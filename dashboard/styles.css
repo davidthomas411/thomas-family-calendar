@@ -85,19 +85,16 @@ body {
 }
 
 .moon {
-  position: absolute;
-  width: clamp(120px, 12vw, 180px);
-  height: clamp(120px, 12vw, 180px);
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
   border-radius: 50%;
-  top: clamp(6%, 8vw, 10%);
-  right: clamp(10%, 12vw, 16%);
   background: transparent;
-  box-shadow: 0 0 70px rgba(180, 210, 255, 0.35);
+  box-shadow: 0 0 50px rgba(180, 210, 255, 0.35);
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-6px) scale(0.94);
   transition: opacity 1.2s ease, transform 1.8s ease;
   pointer-events: none;
-  z-index: 2;
 }
 
 #sky.night .sky-stars {
@@ -106,8 +103,11 @@ body {
 }
 
 #sky.night .moon {
+  width: clamp(54px, 6.6vw, 96px);
+  height: clamp(54px, 6.6vw, 96px);
+  margin-left: clamp(12px, 2vw, 18px);
   opacity: 0.9;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 @keyframes stars-twinkle {
@@ -232,6 +232,11 @@ body {
   gap: 10px;
 }
 
+.time-row {
+  display: flex;
+  align-items: center;
+}
+
 .time {
   font-size: clamp(3rem, 7vw, 7.5rem);
   font-weight: 300;
@@ -324,6 +329,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
 }
 
 .panel-title {

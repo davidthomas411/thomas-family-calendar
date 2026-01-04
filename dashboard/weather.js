@@ -57,6 +57,8 @@
   const root = document.documentElement;
   const skyEl = document.getElementById("sky");
   const moonEl = document.getElementById("moon");
+  const MOON_TEXTURE_SRC = "image/moon-texture.jpg";
+  const moonTexture = moonEl ? new Image() : null;
 
   const DAY_NAMES = [
     "Sunday",
@@ -116,6 +118,7 @@
     tempLow: null,
     precipText: "",
     letterDayMap: new Map(),
+    isFallback: false,
   };
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -214,27 +217,29 @@
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.clip();
 
-    const surface = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.15, 0, 0, radius);
-    surface.addColorStop(0, "rgba(255, 255, 255, 0.98)");
-    surface.addColorStop(0.55, "rgba(218, 228, 242, 0.94)");
-    surface.addColorStop(1, "rgba(150, 170, 200, 0.88)");
-    ctx.fillStyle = surface;
+    if (moonTexture && moonTexture.complete) {
+      ctx.drawImage(moonTexture, -radius, -radius, radius * 2, radius * 2);
+    } else {
+      const surface = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.15, 0, 0, radius);
+      surface.addColorStop(0, "rgba(255, 255, 255, 0.98)");
+      surface.addColorStop(0.55, "rgba(218, 228, 242, 0.94)");
+      surface.addColorStop(1, "rgba(150, 170, 200, 0.88)");
+      ctx.fillStyle = surface;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const limb = ctx.createRadialGradient(-radius * 0.25, -radius * 0.25, radius * 0.1, 0, 0, radius * 1.05);
+    limb.addColorStop(0, "rgba(255, 255, 255, 0.18)");
+    limb.addColorStop(0.6, "rgba(255, 255, 255, 0.04)");
+    limb.addColorStop(1, "rgba(20, 30, 50, 0.28)");
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = limb;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
-
-    const craters = [
-      { x: -0.18, y: -0.12, r: 0.08, a: 0.22 },
-      { x: 0.16, y: -0.04, r: 0.06, a: 0.2 },
-      { x: 0.12, y: 0.2, r: 0.07, a: 0.18 },
-      { x: -0.06, y: 0.22, r: 0.05, a: 0.18 },
-    ];
-    craters.forEach((spot) => {
-      ctx.fillStyle = `rgba(170, 182, 204, ${spot.a})`;
-      ctx.beginPath();
-      ctx.arc(spot.x * radius, spot.y * radius, spot.r * radius, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    ctx.globalCompositeOperation = "source-over";
 
     const phase = moonPhase(date);
     const illumination = moonIllumination(phase);
@@ -252,6 +257,17 @@
     lastMoonKey = key;
     lastMoonSize = size;
   };
+
+  if (moonTexture) {
+    moonTexture.src = MOON_TEXTURE_SRC;
+    moonTexture.onload = () => {
+      lastMoonKey = "";
+      lastMoonSize = 0;
+      if (skyEl && skyEl.classList.contains("night")) {
+        requestAnimationFrame(() => drawMoon(new Date()));
+      }
+    };
+  }
 
   const hexToRgb = (hex) => {
     const cleaned = hex.replace("#", "");
@@ -312,7 +328,8 @@
       return "";
     }
     if (personKey === "dave") {
-      return title.replace(/\[[^\]]*\]\s*/g, "").trim();
+      const cleaned = title.replace(/\[[^\]]*\]\s*/g, "").trim();
+      return cleaned.slice(0, 8).trimEnd();
     }
     return title.trim();
   };
@@ -952,6 +969,7 @@
       wind: { speed: 5 },
       sys: { sunrise: Math.floor(sunriseUtc / 1000), sunset: Math.floor(sunsetUtc / 1000) },
       timezone: state.timezoneOffset,
+      fallback: true,
     };
   };
 
@@ -1197,7 +1215,7 @@
       skyEl.classList.toggle("night", isNightScene);
     }
     if (isNightScene) {
-      drawMoon(new Date());
+      requestAnimationFrame(() => drawMoon(new Date()));
     }
   };
 
@@ -1227,6 +1245,7 @@
   };
 
   const applyWeather = (data) => {
+    state.isFallback = Boolean(data.fallback);
     state.cloudCover = data.clouds && typeof data.clouds.all === "number"
       ? data.clouds.all / 100
       : 0.3;
@@ -1248,7 +1267,17 @@
     }
 
     const nowSeconds = Math.floor(Date.now() / 1000);
-    const phase = getPhase(nowSeconds, state.sunrise, state.sunset);
+    let phase = getPhase(nowSeconds, state.sunrise, state.sunset);
+    if (state.isFallback) {
+      const hour = getLocationParts().hours;
+      if (hour >= 18 || hour < 6) {
+        phase = "night";
+      } else if (hour >= 17) {
+        phase = "dusk";
+      } else if (hour < 7) {
+        phase = "dawn";
+      }
+    }
     const isDay = phase === "day" || phase === "dawn";
     setSkyColors(phase, state.cloudCover);
 
@@ -1296,7 +1325,7 @@
       lastMoonKey = "";
       lastMoonSize = 0;
       if (skyEl && skyEl.classList.contains("night")) {
-        drawMoon(new Date());
+        requestAnimationFrame(() => drawMoon(new Date()));
       }
     });
   }

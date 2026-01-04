@@ -9,7 +9,6 @@
 <body>
   <div id="sky">
     <div class="sky-stars" aria-hidden="true"></div>
-    <canvas id="moon" class="moon" aria-hidden="true"></canvas>
     <div class="grain" aria-hidden="true"></div>
 
     <div class="dashboard">
@@ -17,7 +16,10 @@
         <section class="primary">
           <div class="primary-header">
             <div class="time-block">
-              <div id="time" class="time">--:--</div>
+              <div class="time-row">
+                <div id="time" class="time">--:--</div>
+                <canvas id="moon" class="moon" aria-hidden="true"></canvas>
+              </div>
               <div id="date" class="date">---</div>
               <div class="location">Bala Cynwyd, PA</div>
             </div>
