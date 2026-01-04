@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, viewport-fit=cover" />
+  <title>Calendar Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="sky">
+    <div class="grain" aria-hidden="true"></div>
+    <div class="admin-shell">
+      <div class="admin-card">
+        <div class="admin-header">
+          <div class="admin-title">Calendar Admin</div>
+          <a class="action-link" href="index.html">Back to dashboard</a>
+        </div>
+
+        <div id="admin-login" class="admin-section">
+          <form id="admin-login-form" class="modal-form">
+            <label class="field">
+              <span>Admin Username</span>
+              <input id="admin-username" type="text" autocomplete="username" required />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="admin-password" type="password" autocomplete="current-password" required />
+            </label>
+            <div id="admin-login-error" class="form-error" role="status" aria-live="polite"></div>
+            <div class="modal-actions">
+              <button class="action-button" type="submit">Sign in</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="admin-panel" class="admin-section" hidden>
+          <div class="admin-controls">
+            <div id="admin-status" class="admin-status"></div>
+            <button id="admin-refresh" class="action-button" type="button">Refresh</button>
+            <button id="admin-logout" class="text-button" type="button">Log out</button>
+          </div>
+          <div id="admin-events" class="admin-events"></div>
+          <div id="admin-empty" class="calendar-status" hidden>No events yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

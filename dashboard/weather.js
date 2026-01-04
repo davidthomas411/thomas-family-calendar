@@ -34,6 +34,14 @@
   const HOCKEY_CALENDAR_URL = "https://www.lowermerionihc.com/calendar/ical/915181";
   const FAMILY_CALENDAR_REFRESH = 30 * 60 * 1000;
   const FAMILY_EVENTS_MAX = 4;
+  const EVENTS_API_URL = "/api/events";
+  const LOGIN_API_URL = "/api/login";
+  const SESSION_KEY = "dashboardSession";
+  const CALENDAR_OPTIONS = [
+    { value: "family", label: "Family" },
+    { value: "dave", label: "Dave" },
+    { value: "lorna", label: "Lorna" },
+  ];
 
   const timeEl = document.getElementById("time");
   const dateEl = document.getElementById("date");
@@ -45,6 +53,21 @@
   const calendarEl = document.getElementById("calendar-strip");
   const upcomingEl = document.getElementById("upcoming-events");
   const personLists = new Map();
+  const addEventButton = document.getElementById("add-event-button");
+  const loginModal = document.getElementById("login-modal");
+  const eventModal = document.getElementById("event-modal");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const loginUsername = document.getElementById("login-username");
+  const loginPassword = document.getElementById("login-password");
+  const eventForm = document.getElementById("event-form");
+  const eventError = document.getElementById("event-error");
+  const eventDate = document.getElementById("event-date");
+  const eventTime = document.getElementById("event-time");
+  const eventDetails = document.getElementById("event-details");
+  const eventCalendar = document.getElementById("event-calendar");
+  const userLabel = document.getElementById("user-label");
+  const logoutButton = document.getElementById("logout-button");
 
   document.querySelectorAll(".person-items[data-person]").forEach((el) => {
     personLists.set(el.dataset.person, el);
@@ -119,6 +142,43 @@
     precipText: "",
     letterDayMap: new Map(),
     isFallback: false,
+  };
+
+  let pendingAction = null;
+
+  const loadSession = () => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_KEY);
+      if (!raw) {
+        return null;
+      }
+      const session = JSON.parse(raw);
+      if (!session || !session.token) {
+        return null;
+      }
+      if (session.expires && Date.now() > session.expires) {
+        window.localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return session;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const saveSession = (session) => {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  };
+
+  const clearSession = () => {
+    window.localStorage.removeItem(SESSION_KEY);
+  };
+
+  const formatUserLabel = (user) => {
+    if (!user) {
+      return "";
+    }
+    return user.charAt(0).toUpperCase() + user.slice(1);
   };
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -323,11 +383,71 @@
     return `${hours}:${minutes.toString().padStart(2, "0")} ${suffix}`;
   };
 
-  const cleanEventTitle = (title, personKey) => {
+  const setModalOpen = (modal, isOpen) => {
+    if (!modal) {
+      return;
+    }
+    modal.classList.toggle("is-open", isOpen);
+    modal.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  };
+
+  const populateCalendarOptions = (session) => {
+    if (!eventCalendar) {
+      return;
+    }
+    eventCalendar.innerHTML = "";
+    CALENDAR_OPTIONS.forEach((option) => {
+      const entry = document.createElement("option");
+      entry.value = option.value;
+      entry.textContent = option.label;
+      eventCalendar.appendChild(entry);
+    });
+
+    if (session && session.role !== "admin" && session.user) {
+      eventCalendar.value = CALENDAR_OPTIONS.some((option) => option.value === session.user)
+        ? session.user
+        : "family";
+    } else {
+      eventCalendar.value = "family";
+    }
+  };
+
+  const updateSessionUI = () => {
+    const session = loadSession();
+    if (userLabel) {
+      userLabel.textContent = session ? `Signed in: ${formatUserLabel(session.user)}` : "";
+    }
+    if (logoutButton) {
+      logoutButton.hidden = !session;
+    }
+    populateCalendarOptions(session);
+  };
+
+  const openEventModal = () => {
+    if (eventError) {
+      eventError.textContent = "";
+    }
+    if (eventDate && !eventDate.value) {
+      eventDate.value = new Date().toISOString().slice(0, 10);
+    }
+    setModalOpen(eventModal, true);
+  };
+
+  const openAddEventFlow = () => {
+    const session = loadSession();
+    if (!session) {
+      pendingAction = "event";
+      setModalOpen(loginModal, true);
+      return;
+    }
+    openEventModal();
+  };
+
+  const cleanEventTitle = (title, personKey, source) => {
     if (!title) {
       return "";
     }
-    if (personKey === "dave") {
+    if (personKey === "dave" && source === "qgenda") {
       const cleaned = title.replace(/\[[^\]]*\]\s*/g, "").trim();
       return cleaned.slice(0, 8).trimEnd();
     }
@@ -335,6 +455,38 @@
   };
 
   const normalizeText = (value) => (value || "").toLowerCase();
+  const normalizeCalendarKey = (value) => (value || "").toLowerCase().trim();
+
+  const toCustomEvent = (entry) => {
+    if (!entry || !entry.date || !entry.details) {
+      return null;
+    }
+    const timeValue = entry.time ? entry.time : "00:00";
+    const start = new Date(`${entry.date}T${timeValue}`);
+    if (Number.isNaN(start.getTime())) {
+      return null;
+    }
+    return {
+      summary: entry.details,
+      start,
+      allDay: !entry.time,
+      calendar: entry.calendar,
+      source: "custom",
+    };
+  };
+
+  const fetchCustomEvents = async () => {
+    try {
+      const response = await fetch(EVENTS_API_URL, { cache: "no-store" });
+      if (!response.ok) {
+        return [];
+      }
+      const data = await response.json();
+      return Array.isArray(data.events) ? data.events : [];
+    } catch (error) {
+      return [];
+    }
+  };
 
   const matchesUpcomingKeyword = (summary) => {
     const text = normalizeText(summary);
@@ -900,7 +1052,7 @@
 
       const title = document.createElement("span");
       title.className = "person-task";
-      const cleaned = cleanEventTitle(event.summary, personKey);
+      const cleaned = cleanEventTitle(event.summary, personKey, event.source);
       title.textContent = cleaned || "Scheduled event";
 
       row.appendChild(time);
@@ -911,12 +1063,36 @@
 
   const refreshFamilyCalendars = async () => {
     const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
     const rangeEnd = new Date(now);
     rangeEnd.setDate(rangeEnd.getDate() + 7);
 
-    if (personLists.has("lorna")) {
-      setPersonStatus("lorna", "No events scheduled");
-    }
+    const customEvents = await fetchCustomEvents();
+    const normalizedCustom = customEvents
+      .map((entry) => {
+        const calendarKey = normalizeCalendarKey(entry.calendar);
+        const event = toCustomEvent(entry);
+        return event && calendarKey ? { ...event, calendarKey } : null;
+      })
+      .filter(Boolean)
+      .filter((event) => {
+        if (event.allDay) {
+          return event.start >= todayStart && event.start < rangeEnd;
+        }
+        return event.start >= now && event.start < rangeEnd;
+      });
+
+    const customByCalendar = new Map();
+    normalizedCustom.forEach((event) => {
+      if (!customByCalendar.has(event.calendarKey)) {
+        customByCalendar.set(event.calendarKey, []);
+      }
+      customByCalendar.get(event.calendarKey).push(event);
+    });
+
+    const customFor = (calendarKey) =>
+      (customByCalendar.get(calendarKey) || []).slice().sort((a, b) => a.start - b.start);
 
     const todayLetter = state.letterDayMap.get(dayKey(now));
     const studentAddOns = buildStudentAddOnEvents(todayLetter, now);
@@ -927,9 +1103,18 @@
       renderPersonEvents("alistair", studentAddOns.alistair);
     }
 
+    if (personLists.has("lorna")) {
+      renderPersonEvents("lorna", customFor("lorna"));
+    }
+    if (personLists.has("family")) {
+      renderPersonEvents("family", customFor("family"));
+    }
+
     if (!personLists.has("dave")) {
       return;
     }
+
+    const customDaveEvents = customFor("dave");
 
     try {
       const text = await fetchIcs(DAVE_CALENDAR_URL);
@@ -939,7 +1124,7 @@
       const events = rawEvents
         .map((event) => {
           const start = parseIcsDate(event.dtstart);
-          return start ? { ...event, start } : null;
+          return start ? { ...event, start, source: "qgenda" } : null;
         })
         .filter(Boolean)
         .filter((event) => {
@@ -947,12 +1132,16 @@
             return true;
           }
           return event.start >= now && event.start < rangeEnd;
-        })
-        .sort((a, b) => a.start - b.start);
+        });
 
-      renderPersonEvents("dave", events);
+      const combined = [...events, ...customDaveEvents].sort((a, b) => a.start - b.start);
+      renderPersonEvents("dave", combined);
     } catch (error) {
-      setPersonStatus("dave", "Calendar unavailable");
+      if (customDaveEvents.length) {
+        renderPersonEvents("dave", customDaveEvents);
+      } else {
+        setPersonStatus("dave", "Calendar unavailable");
+      }
     }
   };
 
@@ -1329,6 +1518,141 @@
       }
     });
   }
+
+  document.querySelectorAll("[data-close-modal]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      const targetId = event.currentTarget.getAttribute("data-close-modal");
+      const modal = targetId === "login-modal" ? loginModal : eventModal;
+      setModalOpen(modal, false);
+      pendingAction = null;
+    });
+  });
+
+  [loginModal, eventModal].forEach((modal) => {
+    if (!modal) {
+      return;
+    }
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        setModalOpen(modal, false);
+        pendingAction = null;
+      }
+    });
+  });
+
+  if (addEventButton) {
+    addEventButton.addEventListener("click", openAddEventFlow);
+  }
+
+  if (logoutButton) {
+    logoutButton.addEventListener("click", () => {
+      clearSession();
+      updateSessionUI();
+    });
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (loginError) {
+        loginError.textContent = "";
+      }
+      const username = loginUsername ? loginUsername.value.trim() : "";
+      const password = loginPassword ? loginPassword.value : "";
+      if (!username || !password) {
+        if (loginError) {
+          loginError.textContent = "Enter a username and password.";
+        }
+        return;
+      }
+      try {
+        const response = await fetch(LOGIN_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          if (loginError) {
+            loginError.textContent = data && data.error ? data.error : "Unable to sign in.";
+          }
+          return;
+        }
+        saveSession(data);
+        updateSessionUI();
+        if (loginForm) {
+          loginForm.reset();
+        }
+        setModalOpen(loginModal, false);
+        if (pendingAction === "event") {
+          pendingAction = null;
+          openEventModal();
+        }
+      } catch (error) {
+        if (loginError) {
+          loginError.textContent = "Unable to sign in.";
+        }
+      }
+    });
+  }
+
+  if (eventForm) {
+    eventForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (eventError) {
+        eventError.textContent = "";
+      }
+      const session = loadSession();
+      if (!session) {
+        pendingAction = "event";
+        setModalOpen(eventModal, false);
+        setModalOpen(loginModal, true);
+        return;
+      }
+      const payload = {
+        date: eventDate ? eventDate.value : "",
+        time: eventTime ? eventTime.value : "",
+        details: eventDetails ? eventDetails.value.trim() : "",
+        calendar: eventCalendar ? eventCalendar.value : "",
+      };
+      try {
+        const response = await fetch(EVENTS_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          if (response.status === 401) {
+            clearSession();
+            updateSessionUI();
+            pendingAction = "event";
+            setModalOpen(eventModal, false);
+            setModalOpen(loginModal, true);
+            return;
+          }
+          if (eventError) {
+            eventError.textContent = data && data.error ? data.error : "Unable to save event.";
+          }
+          return;
+        }
+        if (eventForm) {
+          eventForm.reset();
+        }
+        setModalOpen(eventModal, false);
+        refreshFamilyCalendars();
+      } catch (error) {
+        if (eventError) {
+          eventError.textContent = "Unable to save event.";
+        }
+      }
+    });
+  }
+
+  updateSessionUI();
 
   updateClock();
   setInterval(updateClock, 1000);
