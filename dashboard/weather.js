@@ -1103,6 +1103,7 @@
   const refreshFamilyCalendars = async (options = {}) => {
     const { forceCustom = false } = options;
     const now = new Date();
+    updateLunchTags(now);
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const rangeEnd = new Date(now);
@@ -1609,4 +1610,3 @@
   refreshFamilyCalendars();
   setInterval(refreshFamilyCalendars, FAMILY_CALENDAR_REFRESH);
 })();
-    updateLunchTags(now);

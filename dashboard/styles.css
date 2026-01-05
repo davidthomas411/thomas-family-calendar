@@ -799,10 +799,16 @@ body {
 }
 
 .week-day-tag {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  display: inline-flex;
+  width: fit-content;
 }
 
 .week-events {
@@ -868,10 +874,14 @@ body {
 }
 
 .person-tag {
-  font-size: 0.6rem;
-  letter-spacing: 0.2em;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 
 .person-items {
@@ -980,6 +990,34 @@ body {
   text-transform: uppercase;
   color: var(--text-secondary);
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.meals-week input {
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+
+.meals-status {
+  min-height: 18px;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.meals-status.is-error {
+  color: #ffbcc0;
 }
 
 .meals-list {
@@ -992,7 +1030,7 @@ body {
   display: grid;
   grid-template-columns: minmax(120px, 160px) 1fr;
   gap: 14px;
-  align-items: start;
+  align-items: center;
   padding: 12px 14px;
   border-radius: 18px;
   border: 1px solid var(--panel-border);
@@ -1009,10 +1047,36 @@ body {
 
 .meal-details {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   font-size: 0.95rem;
   color: var(--text-primary);
+}
+
+.meal-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.meal-input {
+  flex: 1;
+  border-radius: 12px;
+  border: none;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: var(--font-sans);
+}
+
+.meal-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.meal-add-button {
+  padding: 8px 12px;
 }
 
 .meal-item {
@@ -1228,6 +1292,11 @@ body {
 
   .meal-day {
     font-size: 0.7rem;
+  }
+
+  .meal-add {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

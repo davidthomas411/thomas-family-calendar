@@ -231,9 +231,6 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "PATCH") {
-    if (session.role !== "admin") {
-      return sendJson(res, 403, { error: "Admin required" });
-    }
     const id = body && typeof body.id === "string" ? body.id : "";
     if (!id) {
       return sendJson(res, 400, { error: "Missing event id" });
@@ -249,18 +246,6 @@ module.exports = async (req, res) => {
       calendar: calendarProvided ? normalizeCalendar(body.calendar) : null,
     };
 
-    if (dateProvided && !updates.date) {
-      return sendJson(res, 400, { error: "Invalid date" });
-    }
-    if (timeProvided && typeof body.time === "string" && body.time.trim() && !updates.time) {
-      return sendJson(res, 400, { error: "Invalid time" });
-    }
-
-    const allowedCalendars = buildAllowedCalendars();
-    if (updates.calendar && !allowedCalendars.has(updates.calendar)) {
-      return sendJson(res, 400, { error: "Invalid calendar" });
-    }
-
     try {
       const events = await loadEvents();
       const index = events.findIndex((event) => event.id === id);
@@ -268,6 +253,28 @@ module.exports = async (req, res) => {
         return sendJson(res, 404, { error: "Event not found" });
       }
       const existing = events[index];
+      const isMealsEvent = existing.calendar === "meals";
+      if (session.role !== "admin" && !isMealsEvent) {
+        return sendJson(res, 403, { error: "Admin required" });
+      }
+      if (session.role !== "admin" && (dateProvided || timeProvided || calendarProvided)) {
+        return sendJson(res, 403, { error: "Not allowed" });
+      }
+
+      if (dateProvided && !updates.date) {
+        return sendJson(res, 400, { error: "Invalid date" });
+      }
+      if (timeProvided && typeof body.time === "string" && body.time.trim() && !updates.time) {
+        return sendJson(res, 400, { error: "Invalid time" });
+      }
+
+      const allowedCalendars = buildAllowedCalendars();
+      if (updates.calendar && !allowedCalendars.has(updates.calendar)) {
+        return sendJson(res, 400, { error: "Invalid calendar" });
+      }
+      if (session.role !== "admin" && updates.calendar && updates.calendar !== "meals") {
+        return sendJson(res, 403, { error: "Not allowed" });
+      }
       const next = {
         ...existing,
         details: updates.details !== null ? updates.details : existing.details,
@@ -287,19 +294,20 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "DELETE") {
-    if (session.role !== "admin") {
-      return sendJson(res, 403, { error: "Admin required" });
-    }
     const id = body && typeof body.id === "string" ? body.id : "";
     if (!id) {
       return sendJson(res, 400, { error: "Missing event id" });
     }
     try {
       const events = await loadEvents();
-      const nextEvents = events.filter((event) => event.id !== id);
-      if (nextEvents.length === events.length) {
+      const existing = events.find((event) => event.id === id);
+      if (!existing) {
         return sendJson(res, 404, { error: "Event not found" });
       }
+      if (session.role !== "admin" && existing.calendar !== "meals") {
+        return sendJson(res, 403, { error: "Admin required" });
+      }
+      const nextEvents = events.filter((event) => event.id !== id);
       await saveEvents(nextEvents);
       return sendJson(res, 200, { ok: true });
     } catch (error) {

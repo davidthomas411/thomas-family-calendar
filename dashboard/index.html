@@ -90,21 +90,16 @@
         <div class="meals-header">
           <div>
             <div class="meals-title">Meal Plan</div>
-            <div id="meals-week" class="meals-week">Week of</div>
+            <div class="meals-week">
+              <span id="meals-week-label">Week of</span>
+              <input id="meals-week-picker" type="date" />
+            </div>
           </div>
           <div class="meals-actions">
-            <button
-              id="meals-add"
-              class="action-button"
-              type="button"
-              data-open-event="true"
-              data-calendar="meals"
-            >
-              Add meal
-            </button>
             <button id="meals-back" class="action-button" type="button">Back to Dashboard</button>
           </div>
         </div>
+        <div id="meals-status" class="meals-status"></div>
         <div id="meals-list" class="meals-list" aria-live="polite"></div>
       </div>
     </section>
