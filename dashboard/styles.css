@@ -1204,6 +1204,8 @@ body {
 
 @media (max-width: 720px) {
   .dashboard {
+    display: flex;
+    flex-direction: column;
     padding: 18px 16px 24px;
     gap: 14px;
   }
@@ -1246,11 +1248,23 @@ body {
 
   .side-panel {
     padding: 14px;
+    align-self: auto;
+    height: auto;
+    min-height: auto;
+    overflow: visible;
   }
 
   .upcoming-list {
     overflow: visible;
     padding-right: 0;
+    flex: none;
+    max-height: none;
+    min-height: auto;
+  }
+
+  .panel-section {
+    flex: none;
+    min-height: auto;
   }
 
   .family-strip,
