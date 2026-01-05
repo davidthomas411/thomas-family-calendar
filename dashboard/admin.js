@@ -4,6 +4,7 @@
   const SESSION_KEY = "dashboardSession";
   const CALENDAR_OPTIONS = [
     { value: "family", label: "Family" },
+    { value: "school", label: "School" },
     { value: "dave", label: "Dave" },
     { value: "lorna", label: "Lorna" },
   ];

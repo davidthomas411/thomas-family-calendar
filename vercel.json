@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/calendar?source=qgenda&refresh=1",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/calendar?source=school&refresh=1",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}

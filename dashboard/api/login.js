@@ -1,6 +1,17 @@
 const { normalizeUser, parseUserList, createToken } = require("../lib/auth");
 
 const readJsonBody = async (req) => {
+  if (req.body) {
+    if (typeof req.body === "string") {
+      return req.body.trim() ? JSON.parse(req.body) : null;
+    }
+    if (Buffer.isBuffer(req.body)) {
+      const raw = req.body.toString("utf8");
+      return raw.trim() ? JSON.parse(raw) : null;
+    }
+    return req.body;
+  }
+
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(chunk);

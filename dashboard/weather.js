@@ -1,20 +1,16 @@
 (() => {
-  // Add your OpenWeatherMap API key to enable live data.
   const WEATHER_API_KEY = "69e07fa498f698ec05e255f8de865387";
   const LOCATION = {
     name: "Bala Cynwyd, PA",
     lat: 40.0068,
     lon: -75.226,
   };
-
-  const REFRESH_INTERVAL = 10 * 60 * 1000;
-  const LETTER_DAY_CALENDAR_URL = "https://www.lmsd.org/cf_calendar/feed.cfm?type=ical&feedID=C1DAEC061C4640888E92DF232728EA82&isgmt=1";
-  const SCHOOL_EVENTS_URL = "https://www.lmsd.org/calendar/calendar_584.ics";
-  // CORS-friendly proxy used if the direct calendar feed is blocked by the browser.
-  const SCHOOL_CALENDAR_PROXY = "https://api.allorigins.win/raw?url=";
+  const WEATHER_REFRESH_INTERVAL = 15 * 60 * 1000;
   const SCHOOL_CALENDAR_REFRESH = 30 * 60 * 1000;
   const SCHOOL_CALENDAR_DAYS = 5;
   const SCHOOL_CALENDAR_MAX_EVENTS_PER_DAY = 4;
+  const THEME_REFRESH_INTERVAL = 60 * 1000;
+  const CUSTOM_EVENTS_CACHE_TTL = 15 * 1000;
   const UPCOMING_KEYWORDS = [
     "show",
     "concert",
@@ -30,15 +26,15 @@
     "winter",
     "break",
   ];
-  const DAVE_CALENDAR_URL = "https://app.qgenda.com/ical?key=8510995d-2d15-4ba7-873a-9c0ad56c1c38";
-  const HOCKEY_CALENDAR_URL = "https://www.lowermerionihc.com/calendar/ical/915181";
   const FAMILY_CALENDAR_REFRESH = 30 * 60 * 1000;
   const FAMILY_EVENTS_MAX = 4;
   const EVENTS_API_URL = "/api/events";
+  const CALENDAR_API_URL = "/api/calendar";
   const LOGIN_API_URL = "/api/login";
   const SESSION_KEY = "dashboardSession";
   const CALENDAR_OPTIONS = [
     { value: "family", label: "Family" },
+    { value: "school", label: "School" },
     { value: "dave", label: "Dave" },
     { value: "lorna", label: "Lorna" },
   ];
@@ -47,9 +43,7 @@
   const dateEl = document.getElementById("date");
   const tempEl = document.getElementById("temp");
   const conditionEl = document.getElementById("condition");
-  const iconEl = document.getElementById("weather-icon");
   const tempRangeEl = document.getElementById("temp-range");
-  const precipEl = document.getElementById("precip");
   const calendarEl = document.getElementById("calendar-strip");
   const upcomingEl = document.getElementById("upcoming-events");
   const personLists = new Map();
@@ -72,10 +66,6 @@
   document.querySelectorAll(".person-items[data-person]").forEach((el) => {
     personLists.set(el.dataset.person, el);
   });
-
-  if (precipEl) {
-    precipEl.style.display = "none";
-  }
 
   const root = document.documentElement;
   const skyEl = document.getElementById("sky");
@@ -128,20 +118,12 @@
   };
 
   const state = {
-    timezoneOffset: -new Date().getTimezoneOffset() * 60,
-    sunrise: null,
-    sunset: null,
-    cloudCover: 0.4,
-    condition: "Clear",
-    temp: 68,
-    windSpeed: 4,
-    isRaining: false,
-    rainIntensity: 0,
-    tempHigh: null,
-    tempLow: null,
-    precipText: "",
     letterDayMap: new Map(),
-    isFallback: false,
+  };
+
+  const customEventsCache = {
+    events: [],
+    fetchedAt: 0,
   };
 
   let pendingAction = null;
@@ -181,7 +163,6 @@
     return user.charAt(0).toUpperCase() + user.slice(1);
   };
 
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const MOON_EPOCH = Date.UTC(2000, 0, 6, 18, 14);
   const SYNODIC_MONTH = 29.530588853;
   let lastMoonKey = "";
@@ -351,17 +332,14 @@
   const getLuma = (rgb) =>
     (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
 
-  const getLocationParts = () => {
-    const now = new Date(Date.now() + state.timezoneOffset * 1000);
-    return {
-      hours: now.getUTCHours(),
-      minutes: now.getUTCMinutes(),
-      day: now.getUTCDay(),
-      date: now.getUTCDate(),
-      month: now.getUTCMonth(),
-      year: now.getUTCFullYear(),
-    };
-  };
+  const getLocationParts = (now = new Date()) => ({
+    hours: now.getHours(),
+    minutes: now.getMinutes(),
+    day: now.getDay(),
+    date: now.getDate(),
+    month: now.getMonth(),
+    year: now.getFullYear(),
+  });
 
   const formatTime = ({ hours, minutes }) =>
     `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
@@ -475,17 +453,85 @@
     };
   };
 
-  const fetchCustomEvents = async () => {
+  const fetchCustomEvents = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - customEventsCache.fetchedAt < CUSTOM_EVENTS_CACHE_TTL) {
+      return customEventsCache.events;
+    }
     try {
       const response = await fetch(EVENTS_API_URL, { cache: "no-store" });
       if (!response.ok) {
-        return [];
+        return customEventsCache.events;
       }
       const data = await response.json();
-      return Array.isArray(data.events) ? data.events : [];
+      const events = Array.isArray(data.events) ? data.events : [];
+      customEventsCache.events = events;
+      customEventsCache.fetchedAt = now;
+      return events;
     } catch (error) {
-      return [];
+      return customEventsCache.events;
     }
+  };
+
+  const normalizeCustomEvents = (customEvents) =>
+    customEvents
+      .map((entry) => {
+        const calendarKey = normalizeCalendarKey(entry.calendar);
+        const event = toCustomEvent(entry);
+        return event && calendarKey ? { ...event, calendarKey } : null;
+      })
+      .filter(Boolean);
+
+  const parseCalendarDateParts = (entry) => {
+    if (!entry || !entry.startDate) {
+      return null;
+    }
+    const [year, month, day] = entry.startDate.split("-").map((value) => Number(value));
+    if (!year || !month || !day) {
+      return null;
+    }
+    let hour = 0;
+    let minute = 0;
+    if (entry.startTime) {
+      const [rawHour, rawMinute] = entry.startTime.split(":");
+      hour = Number(rawHour);
+      minute = Number(rawMinute);
+      if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+        return null;
+      }
+    }
+    return { year, month, day, hour, minute };
+  };
+
+  const toCalendarEvent = (entry, source) => {
+    const parts = parseCalendarDateParts(entry);
+    if (!parts) {
+      return null;
+    }
+    const start = entry.isUtc
+      ? new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute))
+      : new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+    if (Number.isNaN(start.getTime())) {
+      return null;
+    }
+    return {
+      ...entry,
+      start,
+      allDay: entry.allDay != null ? entry.allDay : !entry.startTime,
+      source: entry.source || source,
+    };
+  };
+
+  const fetchCalendarEvents = async (source) => {
+    const response = await fetch(`${CALENDAR_API_URL}?source=${encodeURIComponent(source)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error("Calendar fetch failed");
+    }
+    const data = await response.json();
+    const events = Array.isArray(data.events) ? data.events : [];
+    return events.map((entry) => toCalendarEvent(entry, source)).filter(Boolean);
   };
 
   const matchesUpcomingKeyword = (summary) => {
@@ -534,92 +580,14 @@
   };
 
   const updateClock = () => {
-    const parts = getLocationParts();
+    const now = new Date();
+    const parts = getLocationParts(now);
     if (timeEl) {
       timeEl.textContent = formatTime(parts);
     }
     if (dateEl) {
       dateEl.textContent = formatDate(parts);
     }
-  };
-
-  // Unwrap folded iCal lines so properties parse correctly.
-  const unwrapIcs = (text) =>
-    text.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
-
-  const parseIcsDate = (value) => {
-    if (!value) {
-      return null;
-    }
-    const match = value.match(/^(\d{4})(\d{2})(\d{2})(T(\d{2})(\d{2})(\d{2})?)?(Z)?$/);
-    if (!match) {
-      return null;
-    }
-
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    const hasTime = Boolean(match[4]);
-    const hour = Number(match[5] || 0);
-    const minute = Number(match[6] || 0);
-    const second = Number(match[7] || 0);
-    const isUtc = Boolean(match[8]);
-
-    if (!hasTime) {
-      return new Date(year, month, day);
-    }
-    if (isUtc) {
-      return new Date(Date.UTC(year, month, day, hour, minute, second));
-    }
-    return new Date(year, month, day, hour, minute, second);
-  };
-
-  const parseCalendarEvents = (text) => {
-    const lines = unwrapIcs(text).split("\n");
-    const events = [];
-    let current = null;
-
-    lines.forEach((line) => {
-      if (!line) {
-        return;
-      }
-      if (line === "BEGIN:VEVENT") {
-        current = {};
-        return;
-      }
-      if (line === "END:VEVENT") {
-        if (current) {
-          events.push(current);
-        }
-        current = null;
-        return;
-      }
-      if (!current) {
-        return;
-      }
-
-      const [rawKey, ...rest] = line.split(":");
-      if (!rawKey || rest.length === 0) {
-        return;
-      }
-      const value = rest.join(":").trim();
-      const keyParts = rawKey.split(";");
-      const key = keyParts[0];
-      const params = keyParts.slice(1);
-
-      if (key === "SUMMARY") {
-        current.summary = value;
-      } else if (key === "DTSTART") {
-        current.dtstart = value;
-        current.allDay = params.includes("VALUE=DATE") || value.length === 8;
-      } else if (key === "DTEND") {
-        current.dtend = value;
-      } else if (key === "LOCATION") {
-        current.location = value;
-      }
-    });
-
-    return events;
   };
 
   const dayKey = (date) => {
@@ -811,39 +779,6 @@
     });
   };
 
-  const toProxyUrl = (url) => `${SCHOOL_CALENDAR_PROXY}${encodeURIComponent(url)}`;
-
-  const fetchCalendarText = async (url) => {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error("Calendar fetch failed");
-    }
-    return response.text();
-  };
-
-  const isIcsPayload = (text) => typeof text === "string" && text.includes("BEGIN:VCALENDAR");
-
-  const fetchIcs = async (url) => {
-    try {
-      const direct = await fetchCalendarText(url);
-      if (isIcsPayload(direct)) {
-        return direct;
-      }
-    } catch (error) {
-      // Fall through to proxy.
-    }
-
-    if (!SCHOOL_CALENDAR_PROXY) {
-      throw new Error("Calendar fetch failed");
-    }
-
-    const proxied = await fetchCalendarText(toProxyUrl(url));
-    if (!isIcsPayload(proxied)) {
-      throw new Error("Calendar fetch failed");
-    }
-    return proxied;
-  };
-
   const refreshCalendar = async () => {
     if (!calendarEl) {
       return;
@@ -851,8 +786,6 @@
 
     try {
       const now = new Date();
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
       const weekStart = getSchoolWeekStart(now);
       const rangeEnd = new Date(weekStart);
       rangeEnd.setDate(rangeEnd.getDate() + SCHOOL_CALENDAR_DAYS);
@@ -865,28 +798,30 @@
         setCalendarStatus(upcomingEl, "Loading events...");
       }
 
+      const customEvents = await fetchCustomEvents();
+      const normalizedCustom = normalizeCustomEvents(customEvents);
+      const customSchoolEvents = normalizedCustom.filter((event) => event.calendarKey === "school");
+
+      const [letterResult, schoolResult, hockeyResult] = await Promise.allSettled([
+        fetchCalendarEvents("letter"),
+        fetchCalendarEvents("school"),
+        fetchCalendarEvents("hockey"),
+      ]);
+
       let letterDayAvailable = true;
       const letterDayMap = new Map();
-      try {
-        const text = await fetchIcs(LETTER_DAY_CALENDAR_URL);
-        const rawEvents = parseCalendarEvents(text);
-        rawEvents
-          .map((event) => {
-            const start = parseIcsDate(event.dtstart);
-            return start ? { ...event, start } : null;
-          })
-          .filter(Boolean)
-          .forEach((event) => {
-            if (event.start < weekStart || event.start >= rangeEnd) {
-              return;
-            }
-            const letter = extractLetterDay(event.summary);
-            if (!letter) {
-              return;
-            }
-            letterDayMap.set(dayKey(event.start), letter);
-          });
-      } catch (error) {
+      if (letterResult.status === "fulfilled") {
+        letterResult.value.forEach((event) => {
+          if (event.start < weekStart || event.start >= rangeEnd) {
+            return;
+          }
+          const letter = extractLetterDay(event.summary);
+          if (!letter) {
+            return;
+          }
+          letterDayMap.set(dayKey(event.start), letter);
+        });
+      } else {
         letterDayAvailable = false;
       }
 
@@ -895,40 +830,55 @@
       let schoolEventsAvailable = true;
       const schoolEventsByDay = new Map();
       const upcomingEvents = [];
-      try {
-        const text = await fetchIcs(SCHOOL_EVENTS_URL);
-        const rawEvents = parseCalendarEvents(text);
-        rawEvents
-          .map((event) => {
-            const start = parseIcsDate(event.dtstart);
-            return start ? { ...event, start } : null;
-          })
-          .filter(Boolean)
-          .forEach((event) => {
-            const isUpcomingMatch = matchesUpcomingKeyword(event.summary);
-            if (isUpcomingMatch && event.start >= nextWeekStart && event.start < upcomingEnd) {
-              upcomingEvents.push(event);
-            }
-            if (!isUpcomingMatch) {
-              return;
-            }
-            if (event.start < weekStart || event.start >= rangeEnd) {
-              return;
-            }
-            const key = dayKey(event.start);
-            if (!schoolEventsByDay.has(key)) {
-              schoolEventsByDay.set(key, []);
-            }
-            schoolEventsByDay.get(key).push({ ...event, order: 2 });
-          });
-      } catch (error) {
+      if (schoolResult.status === "fulfilled") {
+        schoolResult.value.forEach((event) => {
+          const isUpcomingMatch = matchesUpcomingKeyword(event.summary);
+          if (isUpcomingMatch && event.start >= nextWeekStart && event.start < upcomingEnd) {
+            upcomingEvents.push(event);
+          }
+          if (!isUpcomingMatch) {
+            return;
+          }
+          if (event.start < weekStart || event.start >= rangeEnd) {
+            return;
+          }
+          const key = dayKey(event.start);
+          if (!schoolEventsByDay.has(key)) {
+            schoolEventsByDay.set(key, []);
+          }
+          schoolEventsByDay.get(key).push({ ...event, order: 2 });
+        });
+      } else {
         schoolEventsAvailable = false;
       }
 
-      if (schoolEventsAvailable) {
-        const sortedUpcoming = upcomingEvents.slice().sort((a, b) => a.start - b.start);
-        renderUpcomingEvents(sortedUpcoming);
-      } else if (upcomingEl) {
+      const customSchoolByDay = new Map();
+      const customUpcoming = [];
+      customSchoolEvents.forEach((event) => {
+        if (event.start >= nextWeekStart && event.start < upcomingEnd) {
+          customUpcoming.push(event);
+        }
+        if (event.start < weekStart || event.start >= rangeEnd) {
+          return;
+        }
+        const key = dayKey(event.start);
+        if (!customSchoolByDay.has(key)) {
+          customSchoolByDay.set(key, []);
+        }
+        customSchoolByDay.get(key).push({ ...event, order: 2 });
+      });
+
+      customSchoolByDay.forEach((events, key) => {
+        if (!schoolEventsByDay.has(key)) {
+          schoolEventsByDay.set(key, []);
+        }
+        schoolEventsByDay.get(key).push(...events);
+      });
+
+      const upcomingCombined = [...upcomingEvents, ...customUpcoming].sort((a, b) => a.start - b.start);
+      if (upcomingCombined.length) {
+        renderUpcomingEvents(upcomingCombined);
+      } else if (!schoolEventsAvailable && upcomingEl) {
         setCalendarStatus(upcomingEl, "Upcoming events unavailable.");
       }
 
@@ -936,30 +886,22 @@
       const hockeyEventsByDay = new Map();
       const hockeyDate = getHockeySaturday(now);
       const hockeyKey = dayKey(hockeyDate);
-      try {
-        const text = await fetchIcs(HOCKEY_CALENDAR_URL);
-        const rawEvents = parseCalendarEvents(text);
-        rawEvents
-          .map((event) => {
-            const start = parseIcsDate(event.dtstart);
-            return start ? { ...event, start } : null;
-          })
-          .filter(Boolean)
-          .forEach((event) => {
-            const key = dayKey(event.start);
-            if (key !== hockeyKey) {
-              return;
-            }
-            if (!hockeyEventsByDay.has(key)) {
-              hockeyEventsByDay.set(key, []);
-            }
-            hockeyEventsByDay.get(key).push(event);
-          });
-      } catch (error) {
+      if (hockeyResult.status === "fulfilled") {
+        hockeyResult.value.forEach((event) => {
+          const key = dayKey(event.start);
+          if (key !== hockeyKey) {
+            return;
+          }
+          if (!hockeyEventsByDay.has(key)) {
+            hockeyEventsByDay.set(key, []);
+          }
+          hockeyEventsByDay.get(key).push(event);
+        });
+      } else {
         hockeyAvailable = false;
       }
 
-      const schoolAvailable = letterDayAvailable || schoolEventsAvailable;
+      const schoolAvailable = letterDayAvailable || schoolEventsAvailable || customSchoolByDay.size > 0;
 
       if (!schoolAvailable && !hockeyAvailable) {
         setCalendarStatus(calendarEl, "Calendar unavailable.");
@@ -1061,27 +1003,21 @@
     });
   };
 
-  const refreshFamilyCalendars = async () => {
+  const refreshFamilyCalendars = async (options = {}) => {
+    const { forceCustom = false } = options;
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const rangeEnd = new Date(now);
     rangeEnd.setDate(rangeEnd.getDate() + 7);
 
-    const customEvents = await fetchCustomEvents();
-    const normalizedCustom = customEvents
-      .map((entry) => {
-        const calendarKey = normalizeCalendarKey(entry.calendar);
-        const event = toCustomEvent(entry);
-        return event && calendarKey ? { ...event, calendarKey } : null;
-      })
-      .filter(Boolean)
-      .filter((event) => {
-        if (event.allDay) {
-          return event.start >= todayStart && event.start < rangeEnd;
-        }
-        return event.start >= now && event.start < rangeEnd;
-      });
+    const customEvents = await fetchCustomEvents(forceCustom);
+    const normalizedCustom = normalizeCustomEvents(customEvents).filter((event) => {
+      if (event.allDay) {
+        return event.start >= todayStart && event.start < rangeEnd;
+      }
+      return event.start >= now && event.start < rangeEnd;
+    });
 
     const customByCalendar = new Map();
     normalizedCustom.forEach((event) => {
@@ -1117,24 +1053,16 @@
     const customDaveEvents = customFor("dave");
 
     try {
-      const text = await fetchIcs(DAVE_CALENDAR_URL);
-      const rawEvents = parseCalendarEvents(text);
       const todayKey = dayKey(now);
+      const events = await fetchCalendarEvents("qgenda");
+      const filtered = events.filter((event) => {
+        if (event.allDay && dayKey(event.start) === todayKey) {
+          return true;
+        }
+        return event.start >= now && event.start < rangeEnd;
+      });
 
-      const events = rawEvents
-        .map((event) => {
-          const start = parseIcsDate(event.dtstart);
-          return start ? { ...event, start, source: "qgenda" } : null;
-        })
-        .filter(Boolean)
-        .filter((event) => {
-          if (event.allDay && dayKey(event.start) === todayKey) {
-            return true;
-          }
-          return event.start >= now && event.start < rangeEnd;
-        });
-
-      const combined = [...events, ...customDaveEvents].sort((a, b) => a.start - b.start);
+      const combined = [...filtered, ...customDaveEvents].sort((a, b) => a.start - b.start);
       renderPersonEvents("dave", combined);
     } catch (error) {
       if (customDaveEvents.length) {
@@ -1146,27 +1074,22 @@
   };
 
 
-  const getFallbackWeather = () => {
-    const parts = getLocationParts();
-    const sunriseUtc = Date.UTC(parts.year, parts.month, parts.date, 6, 30) - state.timezoneOffset * 1000;
-    const sunsetUtc = Date.UTC(parts.year, parts.month, parts.date, 19, 30) - state.timezoneOffset * 1000;
-
-    return {
-      weather: [{ main: "Clouds", description: "broken clouds" }],
-      clouds: { all: 62 },
-      main: { temp: 67 },
-      wind: { speed: 5 },
-      sys: { sunrise: Math.floor(sunriseUtc / 1000), sunset: Math.floor(sunsetUtc / 1000) },
-      timezone: state.timezoneOffset,
-      fallback: true,
-    };
+  const setWeatherUnavailable = (message) => {
+    if (tempEl) {
+      tempEl.textContent = "--°";
+    }
+    if (conditionEl) {
+      conditionEl.textContent = message || "Weather unavailable";
+    }
+    if (tempRangeEl) {
+      tempRangeEl.textContent = "H --° / L --°";
+    }
   };
 
   const fetchWeather = async () => {
     if (!WEATHER_API_KEY) {
-      return getFallbackWeather();
+      return null;
     }
-
     const url = `https://api.openweathermap.org/data/2.5/weather?lat=${LOCATION.lat}&lon=${LOCATION.lon}&units=imperial&appid=${WEATHER_API_KEY}`;
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) {
@@ -1179,7 +1102,6 @@
     if (!WEATHER_API_KEY) {
       return null;
     }
-
     const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${LOCATION.lat}&lon=${LOCATION.lon}&units=imperial&appid=${WEATHER_API_KEY}`;
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) {
@@ -1188,118 +1110,92 @@
     return response.json();
   };
 
-  const applyForecast = (forecast) => {
-    if (!forecast || !forecast.list) {
-      return;
+  const getForecastHighLow = (forecast, date = new Date()) => {
+    if (!forecast || !Array.isArray(forecast.list)) {
+      return null;
     }
-
-    if (forecast.city && typeof forecast.city.timezone === "number") {
-      state.timezoneOffset = forecast.city.timezone;
-    }
-
-    const now = new Date();
-    const todayKey = dayKey(now);
-    let tempMin = null;
-    let tempMax = null;
-    let rainTotal = 0;
-    let snowTotal = 0;
-    let maxPop = 0;
-    let hasRain = false;
-    let hasSnow = false;
-
-    forecast.list.forEach((item) => {
-      const date = new Date(item.dt * 1000);
-      const key = dayKey(date);
-      if (key !== todayKey) {
+    const key = dayKey(date);
+    let min = null;
+    let max = null;
+    forecast.list.forEach((entry) => {
+      const entryDate = new Date(entry.dt * 1000);
+      if (dayKey(entryDate) !== key) {
         return;
       }
-
-      if (typeof item.main.temp_min === "number") {
-        tempMin = tempMin == null ? item.main.temp_min : Math.min(tempMin, item.main.temp_min);
+      const minTemp = entry.main && typeof entry.main.temp_min === "number" ? entry.main.temp_min : null;
+      const maxTemp = entry.main && typeof entry.main.temp_max === "number" ? entry.main.temp_max : null;
+      if (minTemp != null) {
+        min = min == null ? minTemp : Math.min(min, minTemp);
       }
-      if (typeof item.main.temp_max === "number") {
-        tempMax = tempMax == null ? item.main.temp_max : Math.max(tempMax, item.main.temp_max);
-      }
-
-      if (typeof item.pop === "number") {
-        maxPop = Math.max(maxPop, item.pop);
-      }
-
-      if (item.rain && typeof item.rain["3h"] === "number") {
-        rainTotal += item.rain["3h"];
-      }
-      if (item.snow && typeof item.snow["3h"] === "number") {
-        snowTotal += item.snow["3h"];
-      }
-
-      if (item.weather && item.weather.some((entry) => entry.main === "Rain")) {
-        hasRain = true;
-      }
-      if (item.weather && item.weather.some((entry) => entry.main === "Snow")) {
-        hasSnow = true;
+      if (maxTemp != null) {
+        max = max == null ? maxTemp : Math.max(max, maxTemp);
       }
     });
+    if (min == null || max == null) {
+      return null;
+    }
+    return { min, max };
+  };
 
-    state.tempHigh = tempMax;
-    state.tempLow = tempMin;
+  const applyWeather = (current, forecast) => {
+    const description =
+      current && current.weather && current.weather[0] && current.weather[0].description
+        ? current.weather[0].description
+        : null;
+    const temp = current && current.main && typeof current.main.temp === "number"
+      ? current.main.temp
+      : null;
 
-    if (tempRangeEl && tempMax != null && tempMin != null) {
-      tempRangeEl.textContent = `H ${Math.round(tempMax)}° / L ${Math.round(tempMin)}°`;
-    } else if (tempRangeEl) {
-      tempRangeEl.textContent = "";
+    if (tempEl) {
+      tempEl.textContent = temp == null ? "--°" : `${Math.round(temp)}°`;
+    }
+    if (conditionEl) {
+      conditionEl.textContent = description || "Weather unavailable";
     }
 
-    const mmToInches = (value) => value / 25.4;
-    let precipText = "";
-    if (hasSnow || snowTotal > 0) {
-      if (snowTotal > 0) {
-        const snowInches = mmToInches(snowTotal);
-        precipText = `Snow total ${snowInches.toFixed(1)} in`;
+    if (tempRangeEl) {
+      const forecastRange = getForecastHighLow(forecast, new Date());
+      if (forecastRange) {
+        tempRangeEl.textContent = `H ${Math.round(forecastRange.max)}° / L ${Math.round(forecastRange.min)}°`;
+      } else if (current && current.main) {
+        const maxTemp = typeof current.main.temp_max === "number" ? current.main.temp_max : null;
+        const minTemp = typeof current.main.temp_min === "number" ? current.main.temp_min : null;
+        if (maxTemp != null && minTemp != null) {
+          tempRangeEl.textContent = `H ${Math.round(maxTemp)}° / L ${Math.round(minTemp)}°`;
+        } else {
+          tempRangeEl.textContent = "";
+        }
       } else {
-        precipText = `Snow chance ${Math.round(maxPop * 100)}%`;
-      }
-    } else if (hasRain || rainTotal > 0) {
-      if (rainTotal > 0) {
-        const rainInches = mmToInches(rainTotal);
-        precipText = `Rain total ${rainInches.toFixed(1)} in`;
-      } else {
-        precipText = `Rain chance ${Math.round(maxPop * 100)}%`;
-      }
-    }
-
-    state.precipText = precipText;
-    if (precipEl) {
-      if (precipText) {
-        precipEl.textContent = precipText;
-        precipEl.style.display = "block";
-      } else {
-        precipEl.textContent = "";
-        precipEl.style.display = "none";
+        tempRangeEl.textContent = "";
       }
     }
   };
 
-  const getPhase = (nowSeconds, sunrise, sunset) => {
-    if (!sunrise || !sunset) {
-      const hour = getLocationParts().hours;
-      if (hour >= 6 && hour < 17) {
-        return "day";
-      }
-      if (hour >= 17 && hour < 20) {
-        return "dusk";
-      }
-      return "night";
+  const refreshWeather = async () => {
+    if (!WEATHER_API_KEY) {
+      setWeatherUnavailable("Weather unavailable");
+      return;
     }
+    try {
+      const [current, forecast] = await Promise.all([fetchWeather(), fetchForecast()]);
+      applyWeather(current, forecast);
+    } catch (error) {
+      setWeatherUnavailable("Weather unavailable");
+    }
+  };
 
-    const transition = 45 * 60;
-    if (nowSeconds >= sunrise - transition && nowSeconds < sunrise + transition) {
-      return "dawn";
+  let lastThemePhase = "";
+
+  const getPhaseByHour = (date) => {
+    const hour = date.getHours();
+    if (hour >= 7 && hour < 17) {
+      return "day";
     }
-    if (nowSeconds >= sunset - transition && nowSeconds < sunset + transition) {
+    if (hour >= 17 && hour < 20) {
       return "dusk";
     }
-    if (nowSeconds >= sunrise + transition && nowSeconds < sunset - transition) {
-      return "day";
+    if (hour >= 5 && hour < 7) {
+      return "dawn";
     }
     return "night";
   };
@@ -1331,20 +1227,14 @@
     return palettes[phase] || palettes.day;
   };
 
-  // Shift sky palette by time of day and cloud cover.
-  const setSkyColors = (phase, cloudCover) => {
+  const setSkyColors = (phase) => {
     const palette = paletteForPhase(phase);
-    const overcast = hexToRgb("#bcc5d3");
     const topBase = hexToRgb(palette.top);
     const bottomBase = hexToRgb(palette.bottom);
     const glowBase = hexToRgb(palette.glow);
-    const cloudMix = phase === "night"
-      ? clamp(cloudCover * 0.35, 0, 0.4)
-      : clamp(cloudCover * 0.65, 0, 0.7);
-
-    const top = mixRgb(topBase, overcast, cloudMix);
-    const bottom = mixRgb(bottomBase, overcast, cloudMix * 0.8);
-    const glow = mixRgb(glowBase, overcast, cloudMix * 0.5);
+    const top = topBase;
+    const bottom = bottomBase;
+    const glow = glowBase;
 
     root.style.setProperty("--sky-top", rgbToString(top));
     root.style.setProperty("--sky-bottom", rgbToString(bottom));
@@ -1381,9 +1271,9 @@
     const cloudHighlightBase = hexToRgb("#ffffff");
     const cloudCoreBase = hexToRgb("#f2f6ff");
     const cloudShadowBase = hexToRgb("#cfd9e6");
-    let cloudHighlight = mixRgb(cloudHighlightBase, overcast, cloudMix * 0.35);
-    let cloudCore = mixRgb(cloudCoreBase, overcast, cloudMix * 0.5);
-    let cloudShadow = mixRgb(cloudShadowBase, overcast, cloudMix * 0.7);
+    let cloudHighlight = cloudHighlightBase;
+    let cloudCore = cloudCoreBase;
+    let cloudShadow = cloudShadowBase;
 
     if (phase === "night") {
       const nightTint = hexToRgb("#8aa2c6");
@@ -1403,110 +1293,22 @@
     if (skyEl) {
       skyEl.classList.toggle("night", isNightScene);
     }
-    if (isNightScene) {
-      requestAnimationFrame(() => drawMoon(new Date()));
+  };
+
+  const applyTimeTheme = (now = new Date()) => {
+    const phase = getPhaseByHour(now);
+    if (phase === lastThemePhase) {
+      return;
+    }
+    lastThemePhase = phase;
+    setSkyColors(phase);
+    if (phase === "night") {
+      requestAnimationFrame(() => drawMoon(now));
     }
   };
 
-  const iconForCondition = (condition, isDay) => {
-    const stroke = "currentColor";
-    const common = `fill=\"none\" stroke=\"${stroke}\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"`;
-
-    if (condition === "Clear") {
-      return isDay
-        ? `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><circle cx=\"32\" cy=\"32\" r=\"10\" ${common}/><path d=\"M32 6v8M32 50v8M6 32h8M50 32h8M12 12l6 6M46 46l6 6M12 52l6-6M46 18l6-6\" ${common}/></svg>`
-        : `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M41 10a16 16 0 1 0 13 25 18 18 0 1 1-13-25z\" ${common}/></svg>`;
-    }
-
-    if (condition === "Rain" || condition === "Drizzle" || condition === "Thunderstorm") {
-      return `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M20 40a12 12 0 0 1 0-24 16 16 0 0 1 30 6h2a10 10 0 1 1 0 20H20z\" ${common}/><path d=\"M24 46l-4 8M34 46l-4 8M44 46l-4 8\" ${common}/></svg>`;
-    }
-
-    if (condition === "Snow") {
-      return `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M20 38a12 12 0 0 1 0-24 16 16 0 0 1 30 6h2a10 10 0 1 1 0 20H20z\" ${common}/><path d=\"M32 46v12M26 52h12M26 48l12 8M26 60l12-8\" ${common}/></svg>`;
-    }
-
-    if (condition === "Mist" || condition === "Fog" || condition === "Haze" || condition === "Smoke") {
-      return `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M12 30h40M16 38h32M20 46h24\" ${common}/></svg>`;
-    }
-
-    return `<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M20 38a12 12 0 0 1 0-24 16 16 0 0 1 30 6h2a10 10 0 1 1 0 20H20z\" ${common}/></svg>`;
-  };
-
-  const applyWeather = (data) => {
-    state.isFallback = Boolean(data.fallback);
-    state.cloudCover = data.clouds && typeof data.clouds.all === "number"
-      ? data.clouds.all / 100
-      : 0.3;
-    state.condition = data.weather && data.weather[0] ? data.weather[0].main : "Clear";
-    state.temp = data.main && typeof data.main.temp === "number" ? data.main.temp : state.temp;
-    state.windSpeed = data.wind && typeof data.wind.speed === "number" ? data.wind.speed : state.windSpeed;
-    state.sunrise = data.sys && data.sys.sunrise ? data.sys.sunrise : state.sunrise;
-    state.sunset = data.sys && data.sys.sunset ? data.sys.sunset : state.sunset;
-    state.timezoneOffset = typeof data.timezone === "number" ? data.timezone : state.timezoneOffset;
-    state.isRaining = ["Rain", "Drizzle", "Thunderstorm"].includes(state.condition);
-    const rainAmount = data.rain ? (data.rain["1h"] || data.rain["3h"]) : 0;
-    state.rainIntensity = rainAmount ? clamp(rainAmount / 6, 0.2, 0.8) : 0;
-
-    if (tempEl) {
-      tempEl.textContent = `${Math.round(state.temp)}°`;
-    }
-    if (conditionEl) {
-      conditionEl.textContent = data.weather && data.weather[0] ? data.weather[0].description : state.condition;
-    }
-
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    let phase = getPhase(nowSeconds, state.sunrise, state.sunset);
-    if (state.isFallback) {
-      const hour = getLocationParts().hours;
-      if (hour >= 18 || hour < 6) {
-        phase = "night";
-      } else if (hour >= 17) {
-        phase = "dusk";
-      } else if (hour < 7) {
-        phase = "dawn";
-      }
-    }
-    const isDay = phase === "day" || phase === "dawn";
-    setSkyColors(phase, state.cloudCover);
-
-    if (iconEl) {
-      iconEl.innerHTML = iconForCondition(state.condition, isDay);
-    }
-
-    if (window.DashboardSky && typeof window.DashboardSky.setConditions === "function") {
-      window.DashboardSky.setConditions({
-        cloudCover: state.cloudCover,
-        windSpeed: state.windSpeed,
-        isNight: phase === "night",
-        isRaining: state.isRaining,
-        rainIntensity: state.rainIntensity,
-      });
-    }
-
-    updateClock();
-  };
-
-  const refreshWeather = async () => {
-    try {
-      const data = await fetchWeather();
-      applyWeather(data);
-    } catch (error) {
-      applyWeather(getFallbackWeather());
-    }
-
-    try {
-      const forecast = await fetchForecast();
-      applyForecast(forecast);
-    } catch (error) {
-      if (tempRangeEl) {
-        tempRangeEl.textContent = "";
-      }
-      if (precipEl) {
-        precipEl.textContent = "";
-        precipEl.style.display = "none";
-      }
-    }
+  const refreshTheme = () => {
+    applyTimeTheme(new Date());
   };
 
   if (moonEl) {
@@ -1643,7 +1445,7 @@
           eventForm.reset();
         }
         setModalOpen(eventModal, false);
-        refreshFamilyCalendars();
+        refreshFamilyCalendars({ forceCustom: true });
       } catch (error) {
         if (eventError) {
           eventError.textContent = "Unable to save event.";
@@ -1655,9 +1457,11 @@
   updateSessionUI();
 
   updateClock();
+  refreshTheme();
   setInterval(updateClock, 1000);
+  setInterval(refreshTheme, THEME_REFRESH_INTERVAL);
   refreshWeather();
-  setInterval(refreshWeather, REFRESH_INTERVAL);
+  setInterval(refreshWeather, WEATHER_REFRESH_INTERVAL);
   refreshCalendar();
   setInterval(refreshCalendar, SCHOOL_CALENDAR_REFRESH);
   refreshFamilyCalendars();

@@ -269,6 +269,10 @@ body {
   max-width: fit-content;
 }
 
+.weather-block.is-simple {
+  gap: 10px;
+}
+
 .weather-icon {
   width: 52px;
   height: 52px;

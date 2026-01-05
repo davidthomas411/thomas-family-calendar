@@ -2,6 +2,17 @@ const crypto = require("crypto");
 const { normalizeUser, parseUserList, verifyToken } = require("../lib/auth");
 
 const readJsonBody = async (req) => {
+  if (req.body) {
+    if (typeof req.body === "string") {
+      return req.body.trim() ? JSON.parse(req.body) : null;
+    }
+    if (Buffer.isBuffer(req.body)) {
+      const raw = req.body.toString("utf8");
+      return raw.trim() ? JSON.parse(raw) : null;
+    }
+    return req.body;
+  }
+
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(chunk);
@@ -21,6 +32,35 @@ const sendJson = (res, status, payload) => {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(payload));
+};
+
+const getDebugFlag = (req) => {
+  try {
+    const url = new URL(req.url, "http://localhost");
+    const debug = url.searchParams.get("debug");
+    return debug === "1" || debug === "true";
+  } catch (error) {
+    return false;
+  }
+};
+
+const formatError = (error) => {
+  if (!error) {
+    return null;
+  }
+  return {
+    name: error.name || "Error",
+    message: error.message || String(error),
+    stack: error.stack || "",
+  };
+};
+
+const sendError = (res, status, message, error, debug) => {
+  const payload = { error: message };
+  if (debug && error) {
+    payload.debug = formatError(error);
+  }
+  return sendJson(res, status, payload);
 };
 
 const getAuthSession = (req) => {
@@ -60,10 +100,23 @@ const parseTimeValue = (value) => {
 
 const normalizeCalendar = (value) => normalizeUser(value);
 
+const DEFAULT_CALENDARS = ["family", "school", "dave", "lorna"];
+
+const parseCalendarList = (value) => {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((entry) => normalizeUser(entry))
+    .filter(Boolean);
+};
+
 const buildAllowedCalendars = () => {
   const familyUsers = parseUserList(process.env.FAMILY_USERS);
-  const calendars = new Set(["family"]);
+  const calendars = new Set(DEFAULT_CALENDARS);
   familyUsers.forEach((_pass, user) => calendars.add(user));
+  parseCalendarList(process.env.FAMILY_CALENDARS).forEach((calendar) => calendars.add(calendar));
   return calendars;
 };
 
@@ -78,7 +131,12 @@ const loadEvents = async () => {
     const data = await response.json();
     return Array.isArray(data.events) ? data.events : [];
   } catch (error) {
-    if (error && error.name === "BlobNotFoundError") {
+    const message = error && error.message ? error.message : "";
+    if (
+      (error && error.name === "BlobNotFoundError") ||
+      (error && error.status === 404) ||
+      message.includes("requested blob does not exist")
+    ) {
       return [];
     }
     throw error;
@@ -102,12 +160,14 @@ const saveEvents = async (events) => {
 };
 
 module.exports = async (req, res) => {
+  const debug = getDebugFlag(req);
   if (req.method === "GET") {
     try {
       const events = await loadEvents();
       return sendJson(res, 200, { events });
     } catch (error) {
-      return sendJson(res, 500, { error: "Unable to load events" });
+      console.error("[events] load failed", error);
+      return sendError(res, 500, "Unable to load events", error, debug);
     }
   }
 
@@ -115,7 +175,8 @@ module.exports = async (req, res) => {
   try {
     body = await readJsonBody(req);
   } catch (error) {
-    return sendJson(res, 400, { error: "Invalid JSON" });
+    console.error("[events] invalid json", error);
+    return sendError(res, 400, "Invalid JSON", error, debug);
   }
 
   const session = getAuthSession(req);
@@ -143,10 +204,6 @@ module.exports = async (req, res) => {
       return sendJson(res, 400, { error: "Invalid calendar" });
     }
 
-    if (session.role !== "admin" && calendar !== session.user && calendar !== "family") {
-      return sendJson(res, 403, { error: "Not allowed for this calendar" });
-    }
-
     const now = new Date().toISOString();
     const event = {
       id: crypto.randomUUID(),
@@ -166,7 +223,8 @@ module.exports = async (req, res) => {
       await saveEvents(events);
       return sendJson(res, 200, { event });
     } catch (error) {
-      return sendJson(res, 500, { error: "Unable to save event" });
+      console.error("[events] save failed", error);
+      return sendError(res, 500, "Unable to save event", error, debug);
     }
   }
 
@@ -221,7 +279,8 @@ module.exports = async (req, res) => {
       await saveEvents(events);
       return sendJson(res, 200, { event: next });
     } catch (error) {
-      return sendJson(res, 500, { error: "Unable to update event" });
+      console.error("[events] update failed", error);
+      return sendError(res, 500, "Unable to update event", error, debug);
     }
   }
 
@@ -242,7 +301,8 @@ module.exports = async (req, res) => {
       await saveEvents(nextEvents);
       return sendJson(res, 200, { ok: true });
     } catch (error) {
-      return sendJson(res, 500, { error: "Unable to delete event" });
+      console.error("[events] delete failed", error);
+      return sendError(res, 500, "Unable to delete event", error, debug);
     }
   }
 
