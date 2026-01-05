@@ -37,6 +37,7 @@
     { value: "school", label: "School" },
     { value: "dave", label: "Dave" },
     { value: "lorna", label: "Lorna" },
+    { value: "meals", label: "Meals" },
   ];
 
   const timeEl = document.getElementById("time");
@@ -56,12 +57,21 @@
   const loginPassword = document.getElementById("login-password");
   const eventForm = document.getElementById("event-form");
   const eventError = document.getElementById("event-error");
+  const eventTitle = document.getElementById("event-title");
   const eventDate = document.getElementById("event-date");
   const eventTime = document.getElementById("event-time");
   const eventDetails = document.getElementById("event-details");
   const eventCalendar = document.getElementById("event-calendar");
   const userLabel = document.getElementById("user-label");
   const logoutButton = document.getElementById("logout-button");
+  const mealPreviewButton = document.getElementById("meal-preview");
+  const mealsView = document.getElementById("meals-view");
+  const mealsBack = document.getElementById("meals-back");
+  const dashboardView = document.getElementById("dashboard-view");
+  const MEALS_HASH = "#meals";
+  const eventsChannel = typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("dashboard-events")
+    : null;
 
   document.querySelectorAll(".person-items[data-person]").forEach((el) => {
     personLists.set(el.dataset.person, el);
@@ -127,6 +137,22 @@
   };
 
   let pendingAction = null;
+  let pendingCalendar = null;
+
+  const setMealsView = (showMeals) => {
+    if (!mealsView || !dashboardView) {
+      return;
+    }
+    mealsView.hidden = !showMeals;
+    dashboardView.hidden = showMeals;
+    mealsView.style.display = showMeals ? "flex" : "none";
+    dashboardView.style.display = showMeals ? "none" : "grid";
+    document.body.classList.toggle("meals-active", showMeals);
+  };
+
+  const syncMealsFromHash = () => {
+    setMealsView(window.location.hash === MEALS_HASH);
+  };
 
   const loadSession = () => {
     try {
@@ -390,6 +416,18 @@
     }
   };
 
+  const setEventCalendarSelection = (calendarOverride) => {
+    if (!eventCalendar || !calendarOverride) {
+      return;
+    }
+    const optionExists = Array.from(eventCalendar.options).some(
+      (option) => option.value === calendarOverride
+    );
+    if (optionExists) {
+      eventCalendar.value = calendarOverride;
+    }
+  };
+
   const updateSessionUI = () => {
     const session = loadSession();
     if (userLabel) {
@@ -401,14 +439,18 @@
     populateCalendarOptions(session);
   };
 
-  const openEventModal = () => {
+  const openEventModal = (calendarOverride) => {
     if (eventError) {
       eventError.textContent = "";
+    }
+    if (eventTitle) {
+      eventTitle.textContent = calendarOverride === "meals" ? "Add meal" : "Add event";
     }
     if (eventDate && !eventDate.value) {
       eventDate.value = new Date().toISOString().slice(0, 10);
     }
     setModalOpen(eventModal, true);
+    setEventCalendarSelection(calendarOverride);
   };
 
   const openAddEventFlow = () => {
@@ -665,6 +707,14 @@
       return;
     }
 
+    const formatUpcomingTitle = (event) => {
+      if (event.source === "qgenda") {
+        const cleaned = cleanEventTitle(event.summary, "dave", "qgenda");
+        return cleaned || "Scheduled event";
+      }
+      return event.summary || "School event";
+    };
+
     events.forEach((event) => {
       const item = document.createElement("div");
       item.className = "upcoming-item";
@@ -677,7 +727,7 @@
 
       const title = document.createElement("div");
       title.className = "upcoming-title";
-      title.textContent = event.summary || "School event";
+      title.textContent = formatUpcomingTitle(event);
 
       item.appendChild(meta);
       item.appendChild(title);
@@ -802,10 +852,11 @@
       const normalizedCustom = normalizeCustomEvents(customEvents);
       const customSchoolEvents = normalizedCustom.filter((event) => event.calendarKey === "school");
 
-      const [letterResult, schoolResult, hockeyResult] = await Promise.allSettled([
+      const [letterResult, schoolResult, hockeyResult, qgendaResult] = await Promise.allSettled([
         fetchCalendarEvents("letter"),
         fetchCalendarEvents("school"),
         fetchCalendarEvents("hockey"),
+        fetchCalendarEvents("qgenda"),
       ]);
 
       let letterDayAvailable = true;
@@ -853,11 +904,10 @@
       }
 
       const customSchoolByDay = new Map();
-      const customUpcoming = [];
+      const customUpcomingAll = normalizedCustom.filter(
+        (event) => event.calendarKey !== "meals" && event.start >= nextWeekStart && event.start < upcomingEnd
+      );
       customSchoolEvents.forEach((event) => {
-        if (event.start >= nextWeekStart && event.start < upcomingEnd) {
-          customUpcoming.push(event);
-        }
         if (event.start < weekStart || event.start >= rangeEnd) {
           return;
         }
@@ -875,12 +925,18 @@
         schoolEventsByDay.get(key).push(...events);
       });
 
-      const upcomingCombined = [...upcomingEvents, ...customUpcoming].sort((a, b) => a.start - b.start);
-      if (upcomingCombined.length) {
-        renderUpcomingEvents(upcomingCombined);
-      } else if (!schoolEventsAvailable && upcomingEl) {
-        setCalendarStatus(upcomingEl, "Upcoming events unavailable.");
-      }
+      const qgendaUpcoming = qgendaResult.status === "fulfilled"
+        ? qgendaResult.value.filter(
+          (event) => event.start >= nextWeekStart && event.start < upcomingEnd
+        )
+        : [];
+
+      const upcomingCombined = [
+        ...upcomingEvents,
+        ...customUpcomingAll,
+        ...qgendaUpcoming,
+      ].sort((a, b) => a.start - b.start);
+      renderUpcomingEvents(upcomingCombined);
 
       let hockeyAvailable = true;
       const hockeyEventsByDay = new Map();
@@ -1012,12 +1068,9 @@
     rangeEnd.setDate(rangeEnd.getDate() + 7);
 
     const customEvents = await fetchCustomEvents(forceCustom);
-    const normalizedCustom = normalizeCustomEvents(customEvents).filter((event) => {
-      if (event.allDay) {
-        return event.start >= todayStart && event.start < rangeEnd;
-      }
-      return event.start >= now && event.start < rangeEnd;
-    });
+    const normalizedCustom = normalizeCustomEvents(customEvents).filter(
+      (event) => event.start >= todayStart && event.start < rangeEnd
+    );
 
     const customByCalendar = new Map();
     normalizedCustom.forEach((event) => {
@@ -1056,7 +1109,7 @@
       const todayKey = dayKey(now);
       const events = await fetchCalendarEvents("qgenda");
       const filtered = events.filter((event) => {
-        if (event.allDay && dayKey(event.start) === todayKey) {
+        if (dayKey(event.start) === todayKey) {
           return true;
         }
         return event.start >= now && event.start < rangeEnd;
@@ -1311,6 +1364,16 @@
     applyTimeTheme(new Date());
   };
 
+  if (eventsChannel) {
+    eventsChannel.addEventListener("message", (event) => {
+      if (!event || !event.data || event.data.type !== "events-updated") {
+        return;
+      }
+      refreshFamilyCalendars({ forceCustom: true });
+      refreshCalendar();
+    });
+  }
+
   if (moonEl) {
     window.addEventListener("resize", () => {
       lastMoonKey = "";
@@ -1327,6 +1390,7 @@
       const modal = targetId === "login-modal" ? loginModal : eventModal;
       setModalOpen(modal, false);
       pendingAction = null;
+      pendingCalendar = null;
     });
   });
 
@@ -1338,6 +1402,7 @@
       if (event.target === modal) {
         setModalOpen(modal, false);
         pendingAction = null;
+        pendingCalendar = null;
       }
     });
   });
@@ -1345,6 +1410,36 @@
   if (addEventButton) {
     addEventButton.addEventListener("click", openAddEventFlow);
   }
+
+  if (mealPreviewButton) {
+    mealPreviewButton.addEventListener("click", () => {
+      setMealsView(true);
+      window.location.hash = MEALS_HASH;
+    });
+  }
+
+  if (mealsBack) {
+    mealsBack.addEventListener("click", () => {
+      setMealsView(false);
+      window.location.hash = "";
+    });
+  }
+
+  window.addEventListener("hashchange", syncMealsFromHash);
+
+  document.querySelectorAll("[data-open-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const calendarOverride = button.getAttribute("data-calendar");
+      const session = loadSession();
+      if (!session) {
+        pendingAction = "event";
+        pendingCalendar = calendarOverride || null;
+        setModalOpen(loginModal, true);
+        return;
+      }
+      openEventModal(calendarOverride);
+    });
+  });
 
   if (logoutButton) {
     logoutButton.addEventListener("click", () => {
@@ -1388,7 +1483,8 @@
         setModalOpen(loginModal, false);
         if (pendingAction === "event") {
           pendingAction = null;
-          openEventModal();
+          openEventModal(pendingCalendar);
+          pendingCalendar = null;
         }
       } catch (error) {
         if (loginError) {
@@ -1446,6 +1542,10 @@
         }
         setModalOpen(eventModal, false);
         refreshFamilyCalendars({ forceCustom: true });
+        refreshCalendar();
+        if (eventsChannel) {
+          eventsChannel.postMessage({ type: "events-updated" });
+        }
       } catch (error) {
         if (eventError) {
           eventError.textContent = "Unable to save event.";
@@ -1455,6 +1555,7 @@
   }
 
   updateSessionUI();
+  syncMealsFromHash();
 
   updateClock();
   refreshTheme();

@@ -100,7 +100,7 @@ const parseTimeValue = (value) => {
 
 const normalizeCalendar = (value) => normalizeUser(value);
 
-const DEFAULT_CALENDARS = ["family", "school", "dave", "lorna"];
+const DEFAULT_CALENDARS = ["family", "school", "dave", "lorna", "meals"];
 
 const parseCalendarList = (value) => {
   if (!value) {
@@ -124,7 +124,9 @@ const loadEvents = async () => {
   const { head } = await import("@vercel/blob");
   try {
     const blob = await head("events.json");
-    const response = await fetch(blob.url, { cache: "no-store" });
+    const url = new URL(blob.url);
+    url.searchParams.set("v", Date.now().toString());
+    const response = await fetch(url.toString(), { cache: "no-store" });
     if (!response.ok) {
       return [];
     }
@@ -155,7 +157,7 @@ const saveEvents = async (events) => {
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: "application/json",
-    cacheControlMaxAge: 60,
+    cacheControlMaxAge: 0,
   });
 };
 

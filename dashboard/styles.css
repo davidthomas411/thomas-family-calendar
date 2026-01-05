@@ -24,6 +24,10 @@
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -271,6 +275,59 @@ body {
 
 .weather-block.is-simple {
   gap: 10px;
+}
+
+.primary-widgets {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.primary-widgets .weather-block,
+.primary-widgets .meal-preview {
+  flex: 1 1 220px;
+}
+
+.meal-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 20px;
+  border-radius: 22px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 18px 40px var(--panel-shadow);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-width: 220px;
+}
+
+.meal-preview:hover {
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+
+.meal-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.meal-title {
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.meal-link {
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .weather-icon {
@@ -861,6 +918,113 @@ body {
   visibility: hidden;
 }
 
+.meals-view {
+  position: relative;
+  z-index: 6;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(20px, 3vw, 60px);
+  overflow-y: auto;
+}
+
+.meals-card {
+  width: min(92vw, 820px);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  box-shadow: 0 24px 60px var(--panel-shadow);
+  padding: clamp(20px, 3vw, 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.meals-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.meals-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.meals-title {
+  font-size: 1rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.meals-week {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meal-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+}
+
+.meal-day {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.meal-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.meal-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.meal-time {
+  min-width: 70px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.meal-name {
+  flex: 1;
+  min-width: 0;
+}
+
 @supports (backdrop-filter: blur(8px)) {
   .weather-block,
   .side-panel,
@@ -965,12 +1129,95 @@ body {
 }
 
 @media (max-width: 720px) {
+  .dashboard {
+    padding: 18px 16px 24px;
+    gap: 14px;
+  }
+
+  .time {
+    font-size: clamp(2.4rem, 12vw, 3.6rem);
+    letter-spacing: 0.04em;
+  }
+
+  .primary-widgets {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .weather-block,
+  .meal-preview {
+    width: 100%;
+  }
+
+  .meal-preview {
+    padding: 14px 16px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .action-button,
+  .text-button,
+  .action-link {
+    padding: 8px 12px;
+    font-size: 0.7rem;
+  }
+
+  .side-panel {
+    padding: 14px;
+  }
+
+  .upcoming-list {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .family-strip,
+  .calendar-strip {
+    padding: 12px;
+  }
+
   .calendar-grid {
     grid-template-columns: 1fr;
   }
 
   .family-row {
     grid-template-columns: 1fr;
+  }
+
+  .person-time {
+    min-width: 64px;
+    font-size: 0.7rem;
+  }
+
+  .meals-card {
+    padding: 18px;
+  }
+
+  .meals-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .meals-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .meal-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .meal-day {
+    font-size: 0.7rem;
   }
 }
 

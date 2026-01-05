@@ -231,6 +231,9 @@ module.exports = async (req, res) => {
   if (!config) {
     return sendJson(res, 400, { error: "Invalid source" });
   }
+  if (!config.url) {
+    return sendJson(res, 500, { error: "Calendar not configured" });
+  }
 
   const cacheKey = `calendar/${source}.json`;
   const now = Date.now();

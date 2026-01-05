@@ -7,6 +7,7 @@
     { value: "school", label: "School" },
     { value: "dave", label: "Dave" },
     { value: "lorna", label: "Lorna" },
+    { value: "meals", label: "Meals" },
   ];
 
   const loginSection = document.getElementById("admin-login");
@@ -20,6 +21,9 @@
   const statusEl = document.getElementById("admin-status");
   const refreshBtn = document.getElementById("admin-refresh");
   const logoutBtn = document.getElementById("admin-logout");
+  const eventsChannel = typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("dashboard-events")
+    : null;
 
   const loadSession = () => {
     try {
@@ -239,6 +243,9 @@
             return;
           }
           setStatus("Event saved.");
+          if (eventsChannel) {
+            eventsChannel.postMessage({ type: "events-updated" });
+          }
         } catch (error) {
           setStatus("Unable to save event.", true);
         }
@@ -267,6 +274,9 @@
             emptyEl.hidden = false;
           }
           setStatus("Event deleted.");
+          if (eventsChannel) {
+            eventsChannel.postMessage({ type: "events-updated" });
+          }
         } catch (error) {
           setStatus("Unable to delete event.", true);
         }
