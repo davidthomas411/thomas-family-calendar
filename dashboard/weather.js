@@ -650,6 +650,49 @@
 
   const isWeekend = (date) => date.getDay() === 0 || date.getDay() === 6;
 
+  const LUNCH_ANCHOR_KEY = "dashboardLunchAnchor";
+
+  const getLunchAnchor = () => {
+    try {
+      const stored = window.localStorage.getItem(LUNCH_ANCHOR_KEY);
+      if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
+        return new Date(`${stored}T00:00:00`);
+      }
+    } catch (error) {
+      // Ignore storage issues and fall through to default.
+    }
+    const anchor = startOfWeek(new Date());
+    try {
+      window.localStorage.setItem(LUNCH_ANCHOR_KEY, dayKey(anchor));
+    } catch (error) {
+      // Ignore storage errors.
+    }
+    return anchor;
+  };
+
+  const isDaveLunchWeek = (date) => {
+    const anchor = getLunchAnchor();
+    const weekStart = startOfWeek(date);
+    const diffWeeks = Math.floor((weekStart - anchor) / (7 * 24 * 60 * 60 * 1000));
+    const parity = ((diffWeeks % 2) + 2) % 2;
+    return parity === 0;
+  };
+
+  const updateLunchTags = (date = new Date()) => {
+    const daveTag = document.querySelector('[data-person-tag="dave"]');
+    const lornaTag = document.querySelector('[data-person-tag="lorna"]');
+    if (!daveTag && !lornaTag) {
+      return;
+    }
+    const daveWeek = isDaveLunchWeek(date);
+    if (daveTag) {
+      daveTag.textContent = daveWeek ? "School Lunches" : "";
+    }
+    if (lornaTag) {
+      lornaTag.textContent = daveWeek ? "" : "School Lunches";
+    }
+  };
+
   const getSchoolWeekStart = (date) => {
     const start = startOfWeek(date);
     if (isWeekend(date)) {
@@ -1039,13 +1082,11 @@
 
       const time = document.createElement("span");
       time.className = "person-time";
-      const eventKey = dayKey(event.start);
+      const dateLabel = `${formatWeekday(event.start)} ${formatMonthDay(event.start)}`;
       if (event.allDay) {
-        time.textContent = eventKey === todayKey ? "" : formatWeekday(event.start);
-      } else if (eventKey === todayKey) {
-        time.textContent = formatEventTime(event.start);
+        time.textContent = dateLabel;
       } else {
-        time.textContent = `${formatWeekday(event.start)} ${formatEventTime(event.start)}`;
+        time.textContent = `${dateLabel} ${formatEventTime(event.start)}`;
       }
 
       const title = document.createElement("span");
@@ -1568,3 +1609,4 @@
   refreshFamilyCalendars();
   setInterval(refreshFamilyCalendars, FAMILY_CALENDAR_REFRESH);
 })();
+    updateLunchTags(now);
