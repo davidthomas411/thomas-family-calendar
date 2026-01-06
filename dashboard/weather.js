@@ -27,7 +27,6 @@
     "break",
   ];
   const FAMILY_CALENDAR_REFRESH = 30 * 60 * 1000;
-  const FAMILY_EVENTS_MAX = 4;
   const EVENTS_API_URL = "/api/events";
   const CALENDAR_API_URL = "/api/calendar";
   const LOGIN_API_URL = "/api/login";
@@ -1076,7 +1075,7 @@
     }
 
     const todayKey = dayKey(new Date());
-    events.slice(0, FAMILY_EVENTS_MAX).forEach((event) => {
+    events.forEach((event) => {
       const row = document.createElement("div");
       row.className = "person-item";
 
