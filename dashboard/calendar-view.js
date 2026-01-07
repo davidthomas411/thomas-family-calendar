@@ -37,6 +37,7 @@
   const calendarFiltersForm = document.getElementById("calendar-filters-form");
   const calendarFiltersSave = document.getElementById("calendar-filters-save");
   const calendarFiltersStatus = document.getElementById("calendar-filters-status");
+  const calendarLegend = document.getElementById("calendar-legend");
   const dashboardView = document.getElementById("dashboard-view");
   const mealsView = document.getElementById("meals-view");
   const loginModal = document.getElementById("login-modal");
@@ -116,7 +117,44 @@
     if (!summary) {
       return false;
     }
-    return /(\\b[ABCD] Day\\b|K\\/A:|\\bGym\\b|\\bOrchestra\\b|\\bLibrary\\b|\\bChallenge\\b|\\bK:\\b|\\bA:\\b)/i.test(summary);
+    return /(\b[ABCD] Day\b|K\/A:|\bGym\b|\bOrchestra\b|\bLibrary\b|\bChallenge\b|\bK:|\bA:)/i.test(summary);
+  };
+
+  const updateLegendFilters = (filters) => {
+    if (!calendarLegend || !filters) {
+      return;
+    }
+    const includeSources = filters.includeSources || {};
+    const includeCalendars = filters.includeCalendars || {};
+    const allow = (value) => value !== false;
+    const includeCustom = allow(filters.includeCustom);
+    const show = {
+      family: includeCustom && allow(includeCalendars.family),
+      dave: includeCustom && allow(includeCalendars.dave),
+      lorna: includeCustom && allow(includeCalendars.lorna),
+      meals: includeCustom && allow(includeCalendars.meals),
+      school: allow(includeSources.school) || (includeCustom && allow(includeCalendars.school)),
+      hockey: allow(includeSources.hockey),
+      qgenda: allow(includeSources.qgenda),
+      letter: allow(includeSources.letter),
+      summer: allow(includeSources.school),
+    };
+
+    calendarLegend.querySelectorAll("[data-legend]").forEach((item) => {
+      const key = item.getAttribute("data-legend");
+      if (!key) {
+        return;
+      }
+      const isVisible = Object.prototype.hasOwnProperty.call(show, key) ? show[key] : true;
+      item.classList.toggle("is-hidden", !isVisible);
+    });
+  };
+
+  const setLegendVisibility = (mode) => {
+    if (!calendarLegend) {
+      return;
+    }
+    calendarLegend.hidden = mode !== "year";
   };
 
   const dayKey = (date) => {
@@ -536,6 +574,7 @@
     }
     calendarStatus.textContent = "";
     const filters = state.settings.filters || DEFAULT_FILTERS;
+    updateLegendFilters(filters);
     let events = applyFilters(state.cachedEvents, filters);
 
     if (filters.includeSources && filters.includeSources.school) {
@@ -560,6 +599,7 @@
 
   const setCalendarMode = (mode) => {
     state.mode = mode;
+    setLegendVisibility(mode);
     if (calendarModeMonth) {
       calendarModeMonth.classList.toggle("is-active", mode === "month");
     }
