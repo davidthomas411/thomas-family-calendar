@@ -191,6 +191,26 @@
       timeField.appendChild(timeLabel);
       timeField.appendChild(timeInput);
 
+      const endDateField = document.createElement("label");
+      endDateField.className = "field";
+      const endDateLabel = document.createElement("span");
+      endDateLabel.textContent = "End date";
+      const endDateInput = document.createElement("input");
+      endDateInput.type = "date";
+      endDateInput.value = event.endDate || "";
+      endDateField.appendChild(endDateLabel);
+      endDateField.appendChild(endDateInput);
+
+      const endTimeField = document.createElement("label");
+      endTimeField.className = "field";
+      const endTimeLabel = document.createElement("span");
+      endTimeLabel.textContent = "End time";
+      const endTimeInput = document.createElement("input");
+      endTimeInput.type = "time";
+      endTimeInput.value = event.endTime || "";
+      endTimeField.appendChild(endTimeLabel);
+      endTimeField.appendChild(endTimeInput);
+
       const detailsField = document.createElement("label");
       detailsField.className = "field";
       const detailsLabel = document.createElement("span");
@@ -204,6 +224,8 @@
       fields.appendChild(calendarField);
       fields.appendChild(dateField);
       fields.appendChild(timeField);
+      fields.appendChild(endDateField);
+      fields.appendChild(endTimeField);
       fields.appendChild(detailsField);
 
       card.appendChild(fields);
@@ -228,6 +250,8 @@
           calendar: calendarSelect.value,
           date: dateInput.value,
           time: timeInput.value,
+          endDate: endDateInput.value,
+          endTime: endTimeInput.value,
           details: detailsInput.value.trim(),
         };
         try {

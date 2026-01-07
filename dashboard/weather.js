@@ -59,14 +59,18 @@
   const eventTitle = document.getElementById("event-title");
   const eventDate = document.getElementById("event-date");
   const eventTime = document.getElementById("event-time");
+  const eventEndDate = document.getElementById("event-end-date");
+  const eventEndTime = document.getElementById("event-end-time");
   const eventDetails = document.getElementById("event-details");
   const eventCalendar = document.getElementById("event-calendar");
   const userLabel = document.getElementById("user-label");
   const logoutButton = document.getElementById("logout-button");
   const mealPreviewButton = document.getElementById("meal-preview");
+  const todoModal = document.getElementById("todo-modal");
   const mealsView = document.getElementById("meals-view");
   const mealsBack = document.getElementById("meals-back");
   const dashboardView = document.getElementById("dashboard-view");
+  const CALENDAR_HASH = "#calendar";
   const MEALS_HASH = "#meals";
   const eventsChannel = typeof BroadcastChannel !== "undefined"
     ? new BroadcastChannel("dashboard-events")
@@ -150,6 +154,9 @@
   };
 
   const syncMealsFromHash = () => {
+    if (window.location.hash === CALENDAR_HASH) {
+      return;
+    }
     setMealsView(window.location.hash === MEALS_HASH);
   };
 
@@ -447,6 +454,12 @@
     }
     if (eventDate && !eventDate.value) {
       eventDate.value = new Date().toISOString().slice(0, 10);
+    }
+    if (eventEndDate) {
+      eventEndDate.value = "";
+    }
+    if (eventEndTime) {
+      eventEndTime.value = "";
     }
     setModalOpen(eventModal, true);
     setEventCalendarSelection(calendarOverride);
@@ -1425,17 +1438,25 @@
     });
   }
 
+  const modalMap = new Map([
+    ["login-modal", loginModal],
+    ["event-modal", eventModal],
+    ["todo-modal", todoModal],
+  ]);
+
   document.querySelectorAll("[data-close-modal]").forEach((button) => {
     button.addEventListener("click", (event) => {
       const targetId = event.currentTarget.getAttribute("data-close-modal");
-      const modal = targetId === "login-modal" ? loginModal : eventModal;
-      setModalOpen(modal, false);
+      const modal = modalMap.get(targetId);
+      if (modal) {
+        setModalOpen(modal, false);
+      }
       pendingAction = null;
       pendingCalendar = null;
     });
   });
 
-  [loginModal, eventModal].forEach((modal) => {
+  [loginModal, eventModal, todoModal].forEach((modal) => {
     if (!modal) {
       return;
     }
@@ -1551,6 +1572,8 @@
       const payload = {
         date: eventDate ? eventDate.value : "",
         time: eventTime ? eventTime.value : "",
+        endDate: eventEndDate ? eventEndDate.value : "",
+        endTime: eventEndTime ? eventEndTime.value : "",
         details: eventDetails ? eventDetails.value.trim() : "",
         calendar: eventCalendar ? eventCalendar.value : "",
       };

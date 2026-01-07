@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { normalizeUser, parseUserList, verifyToken } = require("../lib/auth");
+const { query } = require("../lib/db");
 
 const readJsonBody = async (req) => {
   if (req.body) {
@@ -120,52 +121,73 @@ const buildAllowedCalendars = () => {
   return calendars;
 };
 
-const loadEvents = async () => {
-  const { head } = await import("@vercel/blob");
-  try {
-    const blob = await head("events.json");
-    const url = new URL(blob.url);
-    url.searchParams.set("v", Date.now().toString());
-    const response = await fetch(url.toString(), { cache: "no-store" });
-    if (!response.ok) {
-      return [];
-    }
-    const data = await response.json();
-    return Array.isArray(data.events) ? data.events : [];
-  } catch (error) {
-    const message = error && error.message ? error.message : "";
-    if (
-      (error && error.name === "BlobNotFoundError") ||
-      (error && error.status === 404) ||
-      message.includes("requested blob does not exist")
-    ) {
-      return [];
-    }
-    throw error;
+const toDateString = (value) => {
+  if (!value) {
+    return "";
   }
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value).slice(0, 10);
 };
 
-const saveEvents = async (events) => {
-  const { put } = await import("@vercel/blob");
-  const payload = {
-    version: 1,
-    updatedAt: new Date().toISOString(),
-    events,
-  };
-  await put("events.json", JSON.stringify(payload, null, 2), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-    cacheControlMaxAge: 0,
-  });
+const toTimeString = (value) => {
+  if (!value) {
+    return "";
+  }
+  return String(value).slice(0, 5);
+};
+
+const toTimestamp = (value) => {
+  if (!value) {
+    return "";
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return new Date(value).toISOString();
+};
+
+const rowToEvent = (row) => ({
+  id: row.id,
+  calendar: row.calendar,
+  details: row.details,
+  date: toDateString(row.date),
+  time: toTimeString(row.time),
+  endDate: toDateString(row.end_date),
+  endTime: toTimeString(row.end_time),
+  allDay: Boolean(row.all_day),
+  createdBy: row.created_by,
+  createdAt: toTimestamp(row.created_at),
+  updatedAt: toTimestamp(row.updated_at),
+});
+
+const listEvents = async () => {
+  const result = await query(
+    `SELECT id, calendar, details, date, time, end_date, end_time, all_day,
+            created_by, created_at, updated_at
+     FROM events
+     ORDER BY date ASC, time ASC NULLS LAST, created_at ASC`
+  );
+  return result.rows.map(rowToEvent);
+};
+
+const getEventById = async (id) => {
+  const result = await query(
+    `SELECT id, calendar, details, date, time, end_date, end_time, all_day,
+            created_by, created_at, updated_at
+     FROM events
+     WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] ? rowToEvent(result.rows[0]) : null;
 };
 
 module.exports = async (req, res) => {
   const debug = getDebugFlag(req);
   if (req.method === "GET") {
     try {
-      const events = await loadEvents();
+      const events = await listEvents();
       return sendJson(res, 200, { events });
     } catch (error) {
       console.error("[events] load failed", error);
@@ -192,6 +214,10 @@ module.exports = async (req, res) => {
     const date = parseDateValue(dateInput);
     const timeInput = body && body.time;
     const time = parseTimeValue(timeInput);
+    const endDateInput = body && body.endDate;
+    let endDate = parseDateValue(endDateInput);
+    const endTimeInput = body && body.endTime;
+    const endTime = parseTimeValue(endTimeInput);
     const calendar = normalizeCalendar(body && body.calendar);
 
     if (!details || !date || !calendar) {
@@ -199,6 +225,18 @@ module.exports = async (req, res) => {
     }
     if (typeof timeInput === "string" && timeInput.trim() && !time) {
       return sendJson(res, 400, { error: "Invalid time" });
+    }
+    if (typeof endDateInput === "string" && endDateInput.trim() && !endDate) {
+      return sendJson(res, 400, { error: "Invalid end date" });
+    }
+    if (typeof endTimeInput === "string" && endTimeInput.trim() && !endTime) {
+      return sendJson(res, 400, { error: "Invalid end time" });
+    }
+    if (endTime && !endDate) {
+      endDate = date;
+    }
+    if (endDate && endDate < date) {
+      return sendJson(res, 400, { error: "End date must be on or after start date" });
     }
 
     const allowedCalendars = buildAllowedCalendars();
@@ -213,6 +251,8 @@ module.exports = async (req, res) => {
       details,
       date,
       time,
+      endDate: endDate || "",
+      endTime: endTime || "",
       allDay: !time,
       createdBy: session.user,
       createdAt: now,
@@ -220,9 +260,27 @@ module.exports = async (req, res) => {
     };
 
     try {
-      const events = await loadEvents();
-      events.push(event);
-      await saveEvents(events);
+      await query(
+        `INSERT INTO events (
+          id, calendar, details, date, time, end_date, end_time, all_day,
+          created_by, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        )`,
+        [
+          event.id,
+          event.calendar,
+          event.details,
+          event.date,
+          event.time || null,
+          event.endDate || null,
+          event.endTime || null,
+          event.allDay,
+          event.createdBy,
+          event.createdAt,
+          event.updatedAt,
+        ]
+      );
       return sendJson(res, 200, { event });
     } catch (error) {
       console.error("[events] save failed", error);
@@ -239,20 +297,22 @@ module.exports = async (req, res) => {
     const timeProvided = body && Object.prototype.hasOwnProperty.call(body, "time");
     const dateProvided = body && Object.prototype.hasOwnProperty.call(body, "date");
     const calendarProvided = body && Object.prototype.hasOwnProperty.call(body, "calendar");
+    const endDateProvided = body && Object.prototype.hasOwnProperty.call(body, "endDate");
+    const endTimeProvided = body && Object.prototype.hasOwnProperty.call(body, "endTime");
     const updates = {
       details: body && typeof body.details === "string" ? body.details.trim() : null,
       date: dateProvided ? parseDateValue(body.date) : null,
       time: timeProvided ? parseTimeValue(body.time) : null,
       calendar: calendarProvided ? normalizeCalendar(body.calendar) : null,
+      endDate: endDateProvided ? parseDateValue(body.endDate) : null,
+      endTime: endTimeProvided ? parseTimeValue(body.endTime) : null,
     };
 
     try {
-      const events = await loadEvents();
-      const index = events.findIndex((event) => event.id === id);
-      if (index < 0) {
+      const existing = await getEventById(id);
+      if (!existing) {
         return sendJson(res, 404, { error: "Event not found" });
       }
-      const existing = events[index];
       const isMealsEvent = existing.calendar === "meals";
       if (session.role !== "admin" && !isMealsEvent) {
         return sendJson(res, 403, { error: "Admin required" });
@@ -266,6 +326,12 @@ module.exports = async (req, res) => {
       }
       if (timeProvided && typeof body.time === "string" && body.time.trim() && !updates.time) {
         return sendJson(res, 400, { error: "Invalid time" });
+      }
+      if (endDateProvided && typeof body.endDate === "string" && body.endDate.trim() && !updates.endDate) {
+        return sendJson(res, 400, { error: "Invalid end date" });
+      }
+      if (endTimeProvided && typeof body.endTime === "string" && body.endTime.trim() && !updates.endTime) {
+        return sendJson(res, 400, { error: "Invalid end time" });
       }
 
       const allowedCalendars = buildAllowedCalendars();
@@ -281,12 +347,45 @@ module.exports = async (req, res) => {
         date: updates.date !== null ? updates.date : existing.date,
         time: updates.time !== null ? updates.time : existing.time,
         calendar: updates.calendar !== null ? updates.calendar : existing.calendar,
+        endDate: updates.endDate !== null ? updates.endDate : existing.endDate,
+        endTime: updates.endTime !== null ? updates.endTime : existing.endTime,
         updatedAt: new Date().toISOString(),
       };
+      if (next.endTime && !next.endDate) {
+        next.endDate = next.date;
+      }
+      if (next.endDate && next.endDate < next.date) {
+        return sendJson(res, 400, { error: "End date must be on or after start date" });
+      }
       next.allDay = !next.time;
-      events[index] = next;
-      await saveEvents(events);
-      return sendJson(res, 200, { event: next });
+
+      const result = await query(
+        `UPDATE events
+         SET calendar = $1,
+             details = $2,
+             date = $3,
+             time = $4,
+             end_date = $5,
+             end_time = $6,
+             all_day = $7,
+             updated_at = $8
+         WHERE id = $9
+         RETURNING id, calendar, details, date, time, end_date, end_time, all_day,
+                   created_by, created_at, updated_at`,
+        [
+          next.calendar,
+          next.details,
+          next.date,
+          next.time || null,
+          next.endDate || null,
+          next.endTime || null,
+          next.allDay,
+          next.updatedAt,
+          next.id,
+        ]
+      );
+      const updated = result.rows[0] ? rowToEvent(result.rows[0]) : next;
+      return sendJson(res, 200, { event: updated });
     } catch (error) {
       console.error("[events] update failed", error);
       return sendError(res, 500, "Unable to update event", error, debug);
@@ -299,16 +398,14 @@ module.exports = async (req, res) => {
       return sendJson(res, 400, { error: "Missing event id" });
     }
     try {
-      const events = await loadEvents();
-      const existing = events.find((event) => event.id === id);
+      const existing = await getEventById(id);
       if (!existing) {
         return sendJson(res, 404, { error: "Event not found" });
       }
       if (session.role !== "admin" && existing.calendar !== "meals") {
         return sendJson(res, 403, { error: "Admin required" });
       }
-      const nextEvents = events.filter((event) => event.id !== id);
-      await saveEvents(nextEvents);
+      await query("DELETE FROM events WHERE id = $1", [id]);
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       console.error("[events] delete failed", error);

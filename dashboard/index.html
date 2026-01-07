@@ -44,9 +44,22 @@
 
       <aside class="side-panel">
         <div class="panel-section">
-          <div class="panel-title">Upcoming</div>
+          <div class="panel-header">
+            <div class="panel-title">Upcoming</div>
+            <button id="calendar-open" class="text-button" type="button">Calendar</button>
+          </div>
           <div id="upcoming-events" class="upcoming-list" aria-live="polite">
             <div class="calendar-status">Loading events...</div>
+          </div>
+        </div>
+        <div class="panel-section todo-panel">
+          <div class="panel-header">
+            <div class="panel-title">To do</div>
+            <button id="todo-add" class="action-button" type="button">Add task</button>
+          </div>
+          <div id="todo-latest" class="todo-latest" hidden></div>
+          <div id="todo-list" class="todo-list" aria-live="polite">
+            <div class="calendar-status">Loading tasks...</div>
           </div>
         </div>
       </aside>
@@ -103,6 +116,45 @@
         <div id="meals-list" class="meals-list" aria-live="polite"></div>
       </div>
     </section>
+
+    <section id="calendar-view" class="calendar-view" hidden>
+      <div class="calendar-card">
+        <div class="calendar-header">
+          <div>
+            <div class="calendar-title">Calendar</div>
+            <div id="calendar-range-label" class="calendar-range">Year view</div>
+          </div>
+          <div class="calendar-actions">
+            <div class="calendar-toggle" role="group" aria-label="Calendar view">
+              <button id="calendar-mode-month" class="text-button" type="button">Month</button>
+              <button id="calendar-mode-year" class="text-button" type="button">Year</button>
+            </div>
+            <input id="calendar-month-picker" type="month" />
+            <input id="calendar-year-picker" type="number" min="2000" max="2100" />
+            <button id="calendar-back" class="action-button" type="button">Back to Dashboard</button>
+          </div>
+        </div>
+        <div id="calendar-filters" class="calendar-filters" hidden>
+          <div class="calendar-filters-title">Admin Filters</div>
+          <form id="calendar-filters-form" class="calendar-filters-grid">
+            <label><input type="checkbox" data-filter="includeCustom" />Manual events</label>
+            <label><input type="checkbox" data-filter="source-school" />School calendar</label>
+            <label><input type="checkbox" data-filter="source-hockey" />Hockey calendar</label>
+            <label><input type="checkbox" data-filter="source-letter" />Letter day calendar</label>
+            <label><input type="checkbox" data-filter="source-qgenda" />QGenda</label>
+            <label><input type="checkbox" data-filter="calendar-meals" />Meal plans</label>
+            <label><input type="checkbox" data-filter="use-upcoming" />Use upcoming keywords</label>
+            <label><input type="checkbox" data-filter="hide-daily" />Hide daily class details</label>
+          </form>
+          <div class="calendar-filters-actions">
+            <button id="calendar-filters-save" class="action-button" type="button">Save filters</button>
+            <div id="calendar-filters-status" class="calendar-status"></div>
+          </div>
+        </div>
+        <div id="calendar-status" class="calendar-status"></div>
+        <div id="calendar-content" class="calendar-content" aria-live="polite"></div>
+      </div>
+    </section>
   </div>
 
   <div id="login-modal" class="modal" aria-hidden="true">
@@ -144,6 +196,14 @@
           <input id="event-time" type="time" />
         </label>
         <label class="field">
+          <span>End date (optional)</span>
+          <input id="event-end-date" type="date" />
+        </label>
+        <label class="field">
+          <span>End time (optional)</span>
+          <input id="event-end-time" type="time" />
+        </label>
+        <label class="field">
           <span>Details</span>
           <textarea id="event-details" rows="3" required></textarea>
         </label>
@@ -159,7 +219,32 @@
     </div>
   </div>
 
+  <div id="todo-modal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="todo-title">
+      <div class="modal-header">
+        <div id="todo-title" class="modal-title">Add task</div>
+        <button class="icon-button" type="button" data-close-modal="todo-modal">X</button>
+      </div>
+      <form id="todo-form" class="modal-form">
+        <label class="field">
+          <span>Task</span>
+          <input id="todo-text" type="text" autocomplete="off" required />
+        </label>
+        <label class="field">
+          <span>Due date (optional)</span>
+          <input id="todo-due-date" type="date" />
+        </label>
+        <div id="todo-error" class="form-error" role="status" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button class="action-button" type="submit">Add task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="weather.js"></script>
   <script src="meals.js"></script>
+  <script src="todos.js"></script>
+  <script src="calendar-view.js"></script>
 </body>
 </html>

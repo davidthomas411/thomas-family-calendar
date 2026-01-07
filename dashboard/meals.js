@@ -2,6 +2,7 @@
   const EVENTS_API_URL = "/api/events";
   const MEALS_REFRESH_INTERVAL = 30 * 60 * 1000;
   const MEALS_HASH = "#meals";
+  const CALENDAR_HASH = "#calendar";
   const SESSION_KEY = "dashboardSession";
 
   const mealPreviewButton = document.getElementById("meal-preview");
@@ -308,11 +309,15 @@
   };
 
   const syncViewFromHash = () => {
-    if (window.location.hash === MEALS_HASH) {
+    const hash = window.location.hash;
+    if (hash === MEALS_HASH) {
       setView("meals");
-    } else {
-      setView("dashboard");
+      return;
     }
+    if (hash === CALENDAR_HASH) {
+      return;
+    }
+    setView("dashboard");
   };
 
   mealPreviewButton.addEventListener("click", () => {
