@@ -907,11 +907,10 @@
       const normalizedCustom = normalizeCustomEvents(customEvents);
       const customSchoolEvents = normalizedCustom.filter((event) => event.calendarKey === "school");
 
-      const [letterResult, schoolResult, hockeyResult, qgendaResult] = await Promise.allSettled([
+      const [letterResult, schoolResult, hockeyResult] = await Promise.allSettled([
         fetchCalendarEvents("letter"),
         fetchCalendarEvents("school"),
         fetchCalendarEvents("hockey"),
-        fetchCalendarEvents("qgenda"),
       ]);
 
       let letterDayAvailable = true;
@@ -980,16 +979,9 @@
         schoolEventsByDay.get(key).push(...events);
       });
 
-      const qgendaUpcoming = qgendaResult.status === "fulfilled"
-        ? qgendaResult.value.filter(
-          (event) => event.start >= nextWeekStart && event.start < upcomingEnd
-        )
-        : [];
-
       const upcomingCombined = [
         ...upcomingEvents,
         ...customUpcomingAll,
-        ...qgendaUpcoming,
       ].sort((a, b) => a.start - b.start);
       renderUpcomingEvents(upcomingCombined);
 
