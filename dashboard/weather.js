@@ -1112,6 +1112,17 @@
     todayStart.setHours(0, 0, 0, 0);
     const rangeEnd = new Date(now);
     rangeEnd.setDate(rangeEnd.getDate() + 7);
+    const workWeekStart = getSchoolWeekStart(now);
+    const workWeekEnd = new Date(workWeekStart);
+    workWeekEnd.setDate(workWeekEnd.getDate() + SCHOOL_CALENDAR_DAYS);
+    const workWeekFloor = isWeekend(now) ? workWeekStart : now;
+    const todayKey = dayKey(now);
+    const isInCurrentWorkWeek = (event) => {
+      if (dayKey(event.start) === todayKey) {
+        return true;
+      }
+      return event.start >= workWeekFloor && event.start < workWeekEnd;
+    };
 
     const customEvents = await fetchCustomEvents(forceCustom);
     const normalizedCustom = normalizeCustomEvents(customEvents).filter(
@@ -1152,16 +1163,10 @@
     const customDaveEvents = customFor("dave");
 
     try {
-      const todayKey = dayKey(now);
       const events = await fetchCalendarEvents("qgenda");
-      const filtered = events.filter((event) => {
-        if (dayKey(event.start) === todayKey) {
-          return true;
-        }
-        return event.start >= now && event.start < rangeEnd;
-      });
-
-      const combined = [...filtered, ...customDaveEvents].sort((a, b) => a.start - b.start);
+      const combined = [...events, ...customDaveEvents]
+        .filter(isInCurrentWorkWeek)
+        .sort((a, b) => a.start - b.start);
       renderPersonEvents("dave", combined);
     } catch (error) {
       if (customDaveEvents.length) {
