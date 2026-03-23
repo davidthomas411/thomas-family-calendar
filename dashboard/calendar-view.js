@@ -327,11 +327,13 @@
           return false;
         }
       }
-      if (filters.useUpcomingKeywords && !matchesUpcomingKeyword(event.summary)) {
-        return false;
-      }
-      if (filters.hideDailySchoolDetails && isDailySchoolDetail(event.summary)) {
-        return false;
+      if (event.source === "school") {
+        if (filters.useUpcomingKeywords && !matchesUpcomingKeyword(event.summary)) {
+          return false;
+        }
+        if (filters.hideDailySchoolDetails && isDailySchoolDetail(event.summary)) {
+          return false;
+        }
       }
       return true;
     });
@@ -615,6 +617,8 @@
     renderView();
   };
 
+  const isCalendarActive = () => window.location.hash === CALENDAR_HASH && !document.hidden;
+
   const setCalendarActive = (isActive) => {
     if (!calendarView) {
       return;
@@ -648,6 +652,9 @@
   };
 
   const refreshData = async (force = false) => {
+    if (!force && !isCalendarActive()) {
+      return;
+    }
     const now = Date.now();
     if (!force && now - state.cachedAt < DATA_REFRESH_INTERVAL) {
       renderView();
@@ -855,9 +862,17 @@
   }
 
   window.addEventListener("hashchange", syncCalendarFromHash);
+  document.addEventListener("visibilitychange", () => {
+    if (isCalendarActive()) {
+      refreshData();
+    }
+  });
 
   setCalendarMode(state.mode);
   syncCalendarFromHash();
-  refreshData(true);
-  setInterval(refreshData, DATA_REFRESH_INTERVAL);
+  setInterval(() => {
+    if (isCalendarActive()) {
+      refreshData();
+    }
+  }, DATA_REFRESH_INTERVAL);
 })();

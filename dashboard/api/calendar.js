@@ -8,8 +8,12 @@ const CALENDAR_SOURCES = {
     ttlMs: 24 * 60 * 60 * 1000,
   },
   hockey: {
-    url: "https://www.lowermerionihc.com/calendar/ical/915181",
+    urls: [
+      "https://ical-cdn.teamsnap.com/team_schedule/filter/games/8008b9a5-560a-4245-859f-465d1136265b.ics",
+      "https://ical-cdn.teamsnap.com/team_schedule/filter/games/ae84875e-bcdc-484b-b4b6-ab7256904679.ics",
+    ],
     ttlMs: 24 * 60 * 60 * 1000,
+    cacheVersion: 2,
   },
   qgenda: {
     url: "https://app.qgenda.com/ical?key=8510995d-2d15-4ba7-873a-9c0ad56c1c38",
@@ -18,6 +22,7 @@ const CALENDAR_SOURCES = {
 };
 
 const CALENDAR_PROXY = "https://api.allorigins.win/raw?url=";
+const { loadJsonCache, saveJsonCache } = require("../lib/blob-cache");
 
 const pad2 = (value) => `${value}`.padStart(2, "0");
 
@@ -146,6 +151,15 @@ const parseCalendarEvents = (text, source) => {
   return events;
 };
 
+const compareEvents = (left, right) => {
+  const leftKey = `${left.startDate || ""} ${left.startTime || ""}`;
+  const rightKey = `${right.startDate || ""} ${right.startTime || ""}`;
+  if (leftKey !== rightKey) {
+    return leftKey.localeCompare(rightKey);
+  }
+  return `${left.summary || ""}`.localeCompare(`${right.summary || ""}`);
+};
+
 const isIcsPayload = (text) => typeof text === "string" && text.includes("BEGIN:VCALENDAR");
 
 const fetchCalendarText = async (url) => {
@@ -177,37 +191,32 @@ const fetchWithFallback = async (url) => {
 };
 
 const loadCache = async (key) => {
-  const { head } = await import("@vercel/blob");
-  try {
-    const blob = await head(key);
-    const response = await fetch(blob.url, { cache: "no-store" });
-    if (!response.ok) {
-      return null;
-    }
-    const data = await response.json();
-    return data && Array.isArray(data.events) ? data : null;
-  } catch (error) {
-    const message = error && error.message ? error.message : "";
-    if (
-      (error && error.name === "BlobNotFoundError") ||
-      (error && error.status === 404) ||
-      message.includes("requested blob does not exist")
-    ) {
-      return null;
-    }
-    throw error;
-  }
+  const data = await loadJsonCache(key);
+  return data && Array.isArray(data.events) ? data : null;
 };
 
-const saveCache = async (key, payload) => {
-  const { put } = await import("@vercel/blob");
-  await put(key, JSON.stringify(payload, null, 2), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-    cacheControlMaxAge: 60,
-  });
+const saveCache = async (key, payload) => saveJsonCache(key, payload);
+
+const fetchSourceEvents = async (config, source) => {
+  const urls = Array.isArray(config.urls) ? config.urls : [config.url];
+  const results = await Promise.allSettled(
+    urls.map(async (url) => {
+      const text = await fetchWithFallback(url);
+      return parseCalendarEvents(text, source);
+    })
+  );
+
+  const events = results
+    .filter((result) => result.status === "fulfilled")
+    .flatMap((result) => result.value)
+    .sort(compareEvents);
+
+  if (events.length > 0) {
+    return events;
+  }
+
+  const failed = results.find((result) => result.status === "rejected");
+  throw failed && failed.reason ? failed.reason : new Error("Calendar fetch failed");
 };
 
 module.exports = async (req, res) => {
@@ -231,19 +240,15 @@ module.exports = async (req, res) => {
   if (!config) {
     return sendJson(res, 400, { error: "Invalid source" });
   }
-  if (!config.url) {
+  if (!config.url && !Array.isArray(config.urls)) {
     return sendJson(res, 500, { error: "Calendar not configured" });
   }
 
-  const cacheKey = `calendar/${source}.json`;
+  const cacheVersion = Number(config.cacheVersion || 1);
+  const cacheKey = `calendar/${source}-v${cacheVersion}.json`;
   const now = Date.now();
 
-  let cached = null;
-  try {
-    cached = await loadCache(cacheKey);
-  } catch (error) {
-    return sendError(res, 500, "Unable to load cache", error, debug);
-  }
+  const cached = await loadCache(cacheKey);
 
   const isFresh = cached && now - cached.fetchedAt < config.ttlMs;
   if (!refresh && isFresh) {
@@ -251,8 +256,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const text = await fetchWithFallback(config.url);
-    const events = parseCalendarEvents(text, source);
+    const events = await fetchSourceEvents(config, source);
     const payload = {
       source,
       fetchedAt: now,

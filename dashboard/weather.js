@@ -713,23 +713,6 @@
     return start;
   };
 
-  const getHockeySaturday = (date) => {
-    const base = new Date(date);
-    base.setHours(0, 0, 0, 0);
-    const day = base.getDay();
-    if (day === 6) {
-      return base;
-    }
-    if (day === 0) {
-      const saturday = new Date(base);
-      saturday.setDate(base.getDate() - 1);
-      return saturday;
-    }
-    const saturday = new Date(base);
-    saturday.setDate(base.getDate() + (6 - day));
-    return saturday;
-  };
-
   const buildWeekDays = (startDate, count) => {
     const days = [];
     for (let i = 0; i < count; i += 1) {
@@ -884,6 +867,45 @@
     });
   };
 
+  const buildHockeyTiles = (eventsByDay, fallbackTile, isAvailable) => {
+    const keys = Array.from(eventsByDay.keys()).sort();
+    if (!keys.length) {
+      if (fallbackTile) {
+        return [{
+          ...fallbackTile,
+          kind: "hockey",
+          tag: "Hockey",
+          maxEvents: 3,
+          highlight: false,
+        }];
+      }
+      return [{
+        date: new Date(),
+        key: "",
+        kind: "hockey",
+        tag: "Hockey",
+        events: [],
+        emptyLabel: isAvailable ? "No upcoming games" : "Hockey unavailable",
+        maxEvents: 3,
+        highlight: false,
+      }];
+    }
+
+    return keys.map((key) => {
+      const [year, month, day] = key.split("-").map(Number);
+      return {
+        date: new Date(year, month - 1, day),
+        key,
+        kind: "hockey",
+        tag: "Hockey",
+        events: eventsByDay.get(key) || [],
+        emptyLabel: "No games",
+        maxEvents: 3,
+        highlight: false,
+      };
+    });
+  };
+
   const refreshCalendar = async () => {
     if (!calendarEl) {
       return;
@@ -898,6 +920,10 @@
       nextWeekStart.setDate(nextWeekStart.getDate() + 7);
       const upcomingEnd = new Date(nextWeekStart);
       upcomingEnd.setDate(upcomingEnd.getDate() + 30);
+      const hockeyRangeStart = new Date(now);
+      hockeyRangeStart.setHours(0, 0, 0, 0);
+      const hockeyRangeEnd = new Date(hockeyRangeStart);
+      hockeyRangeEnd.setDate(hockeyRangeEnd.getDate() + 7);
 
       if (upcomingEl) {
         setCalendarStatus(upcomingEl, "Loading events...");
@@ -987,12 +1013,19 @@
 
       let hockeyAvailable = true;
       const hockeyEventsByDay = new Map();
-      const hockeyDate = getHockeySaturday(now);
-      const hockeyKey = dayKey(hockeyDate);
+      let nextHockeyTile = null;
       if (hockeyResult.status === "fulfilled") {
+        const upcomingHockeyEventsByDay = new Map();
         hockeyResult.value.forEach((event) => {
+          if (event.start < hockeyRangeStart) {
+            return;
+          }
           const key = dayKey(event.start);
-          if (key !== hockeyKey) {
+          if (!upcomingHockeyEventsByDay.has(key)) {
+            upcomingHockeyEventsByDay.set(key, []);
+          }
+          upcomingHockeyEventsByDay.get(key).push(event);
+          if (event.start >= hockeyRangeEnd) {
             return;
           }
           if (!hockeyEventsByDay.has(key)) {
@@ -1000,6 +1033,19 @@
           }
           hockeyEventsByDay.get(key).push(event);
         });
+
+        if (!hockeyEventsByDay.size) {
+          const nextKey = Array.from(upcomingHockeyEventsByDay.keys()).sort()[0] || "";
+          if (nextKey) {
+            const [year, month, day] = nextKey.split("-").map(Number);
+            nextHockeyTile = {
+              date: new Date(year, month - 1, day),
+              key: nextKey,
+              events: upcomingHockeyEventsByDay.get(nextKey) || [],
+              emptyLabel: "No games",
+            };
+          }
+        }
       } else {
         hockeyAvailable = false;
       }
@@ -1025,18 +1071,8 @@
         highlight: highlightKey === day.key,
       }));
 
-      const hockeyTile = {
-        date: hockeyDate,
-        key: hockeyKey,
-        kind: "hockey",
-        tag: "Hockey",
-        events: hockeyEventsByDay.get(hockeyKey) || [],
-        emptyLabel: hockeyAvailable ? "No games" : "Hockey unavailable",
-        maxEvents: 3,
-        highlight: false,
-      };
-
-      const tiles = isWeekend(now) ? [hockeyTile, ...weekDays] : [...weekDays, hockeyTile];
+      const hockeyTiles = buildHockeyTiles(hockeyEventsByDay, nextHockeyTile, hockeyAvailable);
+      const tiles = isWeekend(now) ? [...hockeyTiles, ...weekDays] : [...weekDays, ...hockeyTiles];
       renderDayGrid(calendarEl, tiles);
 
       const todayLetter = letterDayMap.get(dayKey(now));

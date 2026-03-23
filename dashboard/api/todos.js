@@ -1,6 +1,10 @@
 const crypto = require("crypto");
+const { loadJsonCache, saveJsonCache } = require("../lib/blob-cache");
 const { verifyToken } = require("../lib/auth");
 const { query } = require("../lib/db");
+
+const TODOS_CACHE_KEY = "db-cache/todos-v1.json";
+const TODOS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const readJsonBody = async (req) => {
   if (req.body) {
@@ -138,11 +142,36 @@ const getTodoById = async (id) => {
   return result.rows[0] ? rowToTodo(result.rows[0]) : null;
 };
 
+const loadTodosCache = async () => {
+  const cached = await loadJsonCache(TODOS_CACHE_KEY);
+  if (!cached || !Array.isArray(cached.todos)) {
+    return null;
+  }
+  return cached;
+};
+
+const saveTodosCache = async (todos) =>
+  saveJsonCache(TODOS_CACHE_KEY, {
+    cachedAt: Date.now(),
+    todos,
+  });
+
+const refreshTodosCache = async () => {
+  const todos = await listTodos();
+  await saveTodosCache(todos);
+  return todos;
+};
+
 module.exports = async (req, res) => {
   const debug = getDebugFlag(req);
   if (req.method === "GET") {
     try {
+      const cached = await loadTodosCache();
+      if (cached && Date.now() - cached.cachedAt < TODOS_CACHE_TTL_MS) {
+        return sendJson(res, 200, { todos: cached.todos });
+      }
       const todos = await listTodos();
+      await saveTodosCache(todos);
       return sendJson(res, 200, { todos });
     } catch (error) {
       console.error("[todos] load failed", error);
@@ -205,6 +234,9 @@ module.exports = async (req, res) => {
           null,
         ]
       );
+      await refreshTodosCache().catch((error) => {
+        console.error("[todos] cache refresh failed", error);
+      });
       return sendJson(res, 200, { todo });
     } catch (error) {
       console.error("[todos] save failed", error);
@@ -275,6 +307,9 @@ module.exports = async (req, res) => {
         ]
       );
       const updated = result.rows[0] ? rowToTodo(result.rows[0]) : next;
+      await refreshTodosCache().catch((error) => {
+        console.error("[todos] cache refresh failed", error);
+      });
       return sendJson(res, 200, { todo: updated });
     } catch (error) {
       console.error("[todos] update failed", error);

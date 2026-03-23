@@ -1,6 +1,10 @@
 const crypto = require("crypto");
 const { normalizeUser, parseUserList, verifyToken } = require("../lib/auth");
+const { loadJsonCache, saveJsonCache } = require("../lib/blob-cache");
 const { query } = require("../lib/db");
+
+const EVENTS_CACHE_KEY = "db-cache/events-v1.json";
+const EVENTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const readJsonBody = async (req) => {
   if (req.body) {
@@ -183,11 +187,36 @@ const getEventById = async (id) => {
   return result.rows[0] ? rowToEvent(result.rows[0]) : null;
 };
 
+const loadEventsCache = async () => {
+  const cached = await loadJsonCache(EVENTS_CACHE_KEY);
+  if (!cached || !Array.isArray(cached.events)) {
+    return null;
+  }
+  return cached;
+};
+
+const saveEventsCache = async (events) =>
+  saveJsonCache(EVENTS_CACHE_KEY, {
+    cachedAt: Date.now(),
+    events,
+  });
+
+const refreshEventsCache = async () => {
+  const events = await listEvents();
+  await saveEventsCache(events);
+  return events;
+};
+
 module.exports = async (req, res) => {
   const debug = getDebugFlag(req);
   if (req.method === "GET") {
     try {
+      const cached = await loadEventsCache();
+      if (cached && Date.now() - cached.cachedAt < EVENTS_CACHE_TTL_MS) {
+        return sendJson(res, 200, { events: cached.events });
+      }
       const events = await listEvents();
+      await saveEventsCache(events);
       return sendJson(res, 200, { events });
     } catch (error) {
       console.error("[events] load failed", error);
@@ -281,6 +310,9 @@ module.exports = async (req, res) => {
           event.updatedAt,
         ]
       );
+      await refreshEventsCache().catch((error) => {
+        console.error("[events] cache refresh failed", error);
+      });
       return sendJson(res, 200, { event });
     } catch (error) {
       console.error("[events] save failed", error);
@@ -385,6 +417,9 @@ module.exports = async (req, res) => {
         ]
       );
       const updated = result.rows[0] ? rowToEvent(result.rows[0]) : next;
+      await refreshEventsCache().catch((error) => {
+        console.error("[events] cache refresh failed", error);
+      });
       return sendJson(res, 200, { event: updated });
     } catch (error) {
       console.error("[events] update failed", error);
@@ -406,6 +441,9 @@ module.exports = async (req, res) => {
         return sendJson(res, 403, { error: "Admin required" });
       }
       await query("DELETE FROM events WHERE id = $1", [id]);
+      await refreshEventsCache().catch((error) => {
+        console.error("[events] cache refresh failed", error);
+      });
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       console.error("[events] delete failed", error);

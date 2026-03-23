@@ -1,5 +1,9 @@
+const { loadJsonCache, saveJsonCache } = require("../lib/blob-cache");
 const { verifyToken } = require("../lib/auth");
 const { query } = require("../lib/db");
+
+const SETTINGS_CACHE_KEY = "db-cache/calendar-settings-v1.json";
+const SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const readJsonBody = async (req) => {
   if (req.body) {
@@ -166,12 +170,31 @@ const buildDefaultSettings = () => ({
   filters: DEFAULT_FILTERS,
 });
 
+const loadSettingsCache = async () => {
+  const cached = await loadJsonCache(SETTINGS_CACHE_KEY);
+  if (!cached || !cached.settings || typeof cached.settings !== "object") {
+    return null;
+  }
+  return cached;
+};
+
+const saveSettingsCache = async (settings) =>
+  saveJsonCache(SETTINGS_CACHE_KEY, {
+    cachedAt: Date.now(),
+    settings,
+  });
+
 module.exports = async (req, res) => {
   const debug = getDebugFlag(req);
   if (req.method === "GET") {
     try {
+      const cached = await loadSettingsCache();
+      if (cached && Date.now() - cached.cachedAt < SETTINGS_CACHE_TTL_MS) {
+        return sendJson(res, 200, { settings: cached.settings });
+      }
       const stored = await loadSettings();
       const settings = stored || buildDefaultSettings();
+      await saveSettingsCache(settings);
       return sendJson(res, 200, { settings });
     } catch (error) {
       console.error("[calendar-settings] load failed", error);
@@ -207,6 +230,7 @@ module.exports = async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
     await saveSettings(next);
+    await saveSettingsCache(next);
     return sendJson(res, 200, { settings: next });
   } catch (error) {
     console.error("[calendar-settings] update failed", error);
