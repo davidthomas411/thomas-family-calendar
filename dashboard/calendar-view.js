@@ -285,11 +285,9 @@
       cache: "no-store",
     });
     if (!response.ok) {
-      window.CalendarHealth?.report(source, { unavailable: true });
       throw new Error("Calendar fetch failed");
     }
     const data = await response.json();
-    window.CalendarHealth?.report(source, data);
     const events = Array.isArray(data.events) ? data.events : [];
     return events.map((entry) => toCalendarEvent(entry, source)).filter(Boolean);
   };

@@ -31,13 +31,11 @@ test('month navigation, non-admin filters, hockey times and directions work toge
   assert.equal(document.querySelector('.calendar-event-chip'), null);
 });
 
-test('dashboard keeps manual events while reporting current school feeds and rainy weather', async () => {
+test('dashboard keeps manual events while updating rainy weather', async () => {
   const { window, document } = parseHTML(fs.readFileSync(require.resolve('../index.html'), 'utf8'));
   window.location = {hash:''};
   window.localStorage = {getItem:()=>null,setItem:()=>{}};
-  const reported = [];
   let weatherCode;
-  window.CalendarHealth = {report:(name)=>reported.push(name)};
   window.RainGlass = {setWeather:code=>{weatherCode=code;}};
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -49,8 +47,5 @@ test('dashboard keeps manual events while reporting current school feeds and rai
   vm.runInNewContext(fs.readFileSync(require.resolve('../weather.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(weatherCode,500);
-  assert.ok(reported.includes('school'));
-  assert.ok(reported.includes('letter'));
-  assert.ok(reported.includes('hockey'));
   assert.match(document.querySelector('[data-person="family"]').textContent,/Family dinner/);
 });

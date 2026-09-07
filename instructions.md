@@ -6,7 +6,7 @@
 - [x] Refresh 2026–27 middle-school letter days and add Lower Merion JV Bulldogs subscription, retaining earlier hockey history.
 - [x] Preserve imported event durations, decode ICS text, omit cancellations, and deduplicate overlapping subscriptions.
 - [x] Add rain-glass Automatic/Preview/Off controls with reduced-motion support.
-- [x] Add source health indicators, month navigation, rink directions, and filters for all viewers.
+- [x] Add month navigation, rink directions, and filters for all viewers.
 
 ## Development and validation
 
