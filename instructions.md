@@ -10,7 +10,7 @@
 
 ## Development and validation
 
-Run `npm ci`, `npm test`, and `npm run build` in `dashboard`.
+Run `npm ci`, `npm test`, and `npm run check` in `dashboard`. This is a static app with Vercel API functions; keep the existing no-build deployment workflow.
 `npm run dev` starts a read-only preview at http://127.0.0.1:8765 using the actual calendar handler and existing production family records. Editing requires the configured Vercel deployment. The older Python preview is retained for reference; use the Node preview for current sources.
 
 School events use the existing Bala Cynwyd subscription. Middle-school letter days use the current Finalsite calendar-manager feed. New hockey includes games and practices published in the supplied Crossbar subscription. Past TeamSnap calendars remain included for history. The 2025–26 gym/library/orchestra reminders expire July 1, 2026; confirm new class assignments before extending them.
