@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0",
+    "html2canvas": "^1.4.1",
     "pg": "^8.11.5"
   },
   "devDependencies": {
