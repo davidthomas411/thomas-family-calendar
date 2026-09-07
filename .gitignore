@@ -1,4 +1,7 @@
 .DS_Store
+node_modules/
+review/
+staged/
 .env
 .env.local
 .vercel

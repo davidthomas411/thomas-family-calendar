@@ -27,6 +27,16 @@
   --cloud-shadow: #cfd9e6;
 }
 
+/* Quiet glass surfaces; calendar controls stay legible over moving weather. */
+.rain-control { display: flex; align-items: center; gap: .5rem; margin-top: .6rem; font-size: .875rem; }
+.rain-control select { font: inherit; color: inherit; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: .35rem; }
+.rain-control option { color: #122034; background: #fff; }
+.feed-health { display: flex; gap: .5rem; flex-wrap: wrap; }
+.feed-badge { font-size: .875rem; color: var(--text-primary); text-decoration: none; border: 1px solid var(--panel-border); background: var(--panel-bg); border-radius: 8px; padding: .4rem .6rem; }
+.feed-badge[data-warning="true"] { border-color: #b37425; border-style: dashed; }
+.event-directions { display: block; color: inherit; font-size: .875rem; margin-top: .25rem; }
+:focus-visible { outline: 3px solid #438ccf; outline-offset: 3px; }
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -1789,4 +1799,16 @@ body {
   #rain {
     opacity: 0.75;
   }
+}
+/* Refresh layout and readability across tablet and phone sizes. */
+.calendar-actions { flex-wrap: wrap; }
+.calendar-event-chip { white-space: normal; overflow: visible; font-size: .875rem; line-height: 1.4; }
+.calendar-day-events { max-height: 240px; overflow-y: auto; }
+.calendar-filters label, .calendar-filters-title, .action-button, .text-button, .action-link { font-size: .875rem; }
+.calendar-toggle button, .calendar-actions button { min-height: 40px; }
+@media (max-width: 720px) {
+  .month-grid, .month-grid-header { min-width: 770px; }
+  .calendar-content { overflow-x: auto; }
+  .calendar-header { align-items: flex-start; }
+  .rain-control { justify-content: center; }
 }

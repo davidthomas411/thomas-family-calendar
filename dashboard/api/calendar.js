@@ -1,19 +1,22 @@
 const CALENDAR_SOURCES = {
   letter: {
-    url: "https://www.lmsd.org/cf_calendar/feed.cfm?type=ical&feedID=C1DAEC061C4640888E92DF232728EA82&isgmt=1",
+    url: "https://www.lmsd.org/fs/calendar-manager/events.ics?calendar_ids=58",
+    cacheVersion: 3,
     ttlMs: 24 * 60 * 60 * 1000,
   },
   school: {
     url: "https://www.lmsd.org/calendar/calendar_584.ics",
     ttlMs: 24 * 60 * 60 * 1000,
+    cacheVersion: 3,
   },
   hockey: {
     urls: [
+      "https://www.lowermerionihc.com/calendar/ical/915181",
       "https://ical-cdn.teamsnap.com/team_schedule/filter/games/8008b9a5-560a-4245-859f-465d1136265b.ics",
       "https://ical-cdn.teamsnap.com/team_schedule/filter/games/ae84875e-bcdc-484b-b4b6-ab7256904679.ics",
     ],
     ttlMs: 24 * 60 * 60 * 1000,
-    cacheVersion: 2,
+    cacheVersion: 3,
   },
   qgenda: {
     url: "https://app.qgenda.com/ical?key=8510995d-2d15-4ba7-873a-9c0ad56c1c38",
@@ -21,7 +24,6 @@ const CALENDAR_SOURCES = {
   },
 };
 
-const CALENDAR_PROXY = "https://api.allorigins.win/raw?url=";
 const { loadJsonCache, saveJsonCache } = require("../lib/blob-cache");
 
 const pad2 = (value) => `${value}`.padStart(2, "0");
@@ -83,22 +85,31 @@ const parseIcsDateParts = (value) => {
 };
 
 const normalizeEvent = (event, source) => {
+  if (event.status === "CANCELLED") return null;
   const parts = parseIcsDateParts(event.dtstart);
   if (!parts || !parts.year || !parts.month || !parts.day) {
     return null;
   }
+  const end = parseIcsDateParts(event.dtend);
   return {
+    uid: event.uid || "",
     summary: event.summary || "",
     location: event.location || "",
     startDate: `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`,
     startTime: parts.hasTime ? `${pad2(parts.hour)}:${pad2(parts.minute)}` : "",
     allDay: Boolean(event.allDay || !parts.hasTime),
     isUtc: parts.isUtc,
+    endDate: end ? `${end.year}-${pad2(end.month)}-${pad2(end.day)}` : "",
+    endTime: end && end.hasTime ? `${pad2(end.hour)}:${pad2(end.minute)}` : "",
+    endIsUtc: Boolean(end && end.isUtc),
+    endExclusive: Boolean(end && !end.hasTime),
+    description: event.description || "",
     source,
   };
 };
 
-const unwrapIcs = (text) => text.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
+const unwrapIcs = (text) => text.replace(/\r\r?\n/g, "\n").replace(/\n[ \t]/g, "");
+const unescapeText = (text) => text.replace(/\\([nN,;\\])/g, (_, char) => /[nN]/.test(char) ? "\n" : char);
 
 const parseCalendarEvents = (text, source) => {
   const lines = unwrapIcs(text).split("\n");
@@ -137,14 +148,20 @@ const parseCalendarEvents = (text, source) => {
     const params = keyParts.slice(1);
 
     if (key === "SUMMARY") {
-      current.summary = value;
+      current.summary = unescapeText(value);
     } else if (key === "DTSTART") {
       current.dtstart = value;
       current.allDay = params.includes("VALUE=DATE") || value.length === 8;
     } else if (key === "DTEND") {
       current.dtend = value;
     } else if (key === "LOCATION") {
-      current.location = value;
+      current.location = unescapeText(value);
+    } else if (key === "DESCRIPTION") {
+      current.description = unescapeText(value);
+    } else if (key === "UID") {
+      current.uid = value;
+    } else if (key === "STATUS") {
+      current.status = value;
     }
   });
 
@@ -164,6 +181,7 @@ const isIcsPayload = (text) => typeof text === "string" && text.includes("BEGIN:
 
 const fetchCalendarText = async (url) => {
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(12000),
     cache: "no-store",
     headers: { "User-Agent": "HomeCalendar/1.0" },
   });
@@ -174,20 +192,10 @@ const fetchCalendarText = async (url) => {
 };
 
 const fetchWithFallback = async (url) => {
-  try {
-    const direct = await fetchCalendarText(url);
-    if (isIcsPayload(direct)) {
-      return direct;
-    }
-  } catch (error) {
-    // Fall through to proxy.
-  }
-
-  const proxied = await fetchCalendarText(`${CALENDAR_PROXY}${encodeURIComponent(url)}`);
-  if (!isIcsPayload(proxied)) {
-    throw new Error("Calendar fetch failed");
-  }
-  return proxied;
+  // Subscription URLs can carry credentials; never send them to a public proxy.
+  const direct = await fetchCalendarText(url);
+  if (!isIcsPayload(direct)) throw new Error("Calendar fetch failed");
+  return direct;
 };
 
 const loadCache = async (key) => {
@@ -206,17 +214,20 @@ const fetchSourceEvents = async (config, source) => {
     })
   );
 
+  const failed = results.find((result) => result.status === "rejected");
+  // Keep a complete previous snapshot instead of silently caching a partial season.
+  if (failed) throw failed.reason;
   const events = results
     .filter((result) => result.status === "fulfilled")
     .flatMap((result) => result.value)
     .sort(compareEvents);
 
-  if (events.length > 0) {
-    return events;
-  }
-
-  const failed = results.find((result) => result.status === "rejected");
-  throw failed && failed.reason ? failed.reason : new Error("Calendar fetch failed");
+  const seen = new Set();
+  return events.filter(event => {
+    const key = `${event.uid || event.summary}|${event.startDate}|${event.startTime}`;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 };
 
 module.exports = async (req, res) => {

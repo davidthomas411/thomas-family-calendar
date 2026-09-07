@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, viewport-fit=cover" />
-  <title>Home Dashboard</title>
+  <title>Thomas Family Calendar</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -21,7 +21,7 @@
                 <canvas id="moon" class="moon" aria-hidden="true"></canvas>
               </div>
               <div id="date" class="date">---</div>
-              <div class="location">Bala Cynwyd, PA</div>
+              <div class="location">Bala Cynwyd, PA · <span id="school-year-label"></span></div>
             </div>
 
             <div class="primary-widgets">
@@ -29,7 +29,7 @@
                 <div class="weather-meta">
                   <div id="temp" class="temp">--°</div>
                   <div id="condition" class="condition">Loading weather</div>
-                  <div id="temp-range" class="temp-range">H --° / L --°</div>
+                  <div id="temp-range" class="temp-range">H --° / L --°</div><label class="rain-control">Rain glass <select id="rain-mode" aria-label="Rain glass effect"><option value="auto">Automatic</option><option value="preview">Preview rain</option><option value="off">Off</option></select></label>
                 </div>
               </div>
               <button id="meal-preview" class="meal-preview" type="button">
@@ -91,7 +91,7 @@
       </section>
 
       <section class="calendar-strip">
-        <div class="panel-title">School Week + Hockey</div>
+        <div class="panel-header"><div class="panel-title">School Week + Hockey</div><a class="action-link" href="https://www.lowermerionihc.com/calendar" target="_blank" rel="noopener">Hockey club ↗</a></div><div id="feed-health" class="feed-health" role="status"></div>
         <div id="calendar-strip" class="calendar-grid" aria-live="polite">
           <div class="calendar-status">Loading calendar...</div>
         </div>
@@ -129,8 +129,8 @@
               <button id="calendar-mode-month" class="text-button" type="button">Month</button>
               <button id="calendar-mode-year" class="text-button" type="button">Year</button>
             </div>
-            <input id="calendar-month-picker" type="month" />
-            <input id="calendar-year-picker" type="number" min="2000" max="2100" />
+            <button id="calendar-prev" class="text-button" type="button" aria-label="Previous period">←</button><button id="calendar-today" class="text-button" type="button">Today</button><button id="calendar-next" class="text-button" type="button" aria-label="Next period">→</button><button id="calendar-refresh" class="text-button" type="button">Refresh</button><input id="calendar-month-picker" type="month" aria-label="Calendar month" />
+            <input id="calendar-year-picker" aria-label="Calendar year" type="number" min="2000" max="2100" />
             <button id="calendar-back" class="action-button" type="button">Back to Dashboard</button>
           </div>
         </div>
@@ -174,7 +174,7 @@
           </div>
         </div>
         <div id="calendar-filters" class="calendar-filters" hidden>
-          <div class="calendar-filters-title">Admin Filters</div>
+          <div class="calendar-filters-title">Calendar filters</div>
           <form id="calendar-filters-form" class="calendar-filters-grid">
             <label><input type="checkbox" data-filter="includeCustom" />Manual events</label>
             <label><input type="checkbox" data-filter="source-school" />School calendar</label>
@@ -186,7 +186,7 @@
             <label><input type="checkbox" data-filter="hide-daily" />Hide daily class details</label>
           </form>
           <div class="calendar-filters-actions">
-            <button id="calendar-filters-save" class="action-button" type="button">Save filters</button>
+            <button id="calendar-filters-save" class="action-button" type="button">Save family defaults</button>
             <div id="calendar-filters-status" class="calendar-status"></div>
           </div>
         </div>
@@ -281,6 +281,7 @@
     </div>
   </div>
 
+  <script src="rain-glass.js"></script><script src="dashboard-tools.js"></script>
   <script src="weather.js"></script>
   <script src="meals.js"></script>
   <script src="todos.js"></script>

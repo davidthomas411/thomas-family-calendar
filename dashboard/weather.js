@@ -17,6 +17,7 @@
     "closed",
     "5th",
     "6th",
+    "7th", "8th", "grade", "orientation", "first day", "final day", "early dismissal",
     "all schools",
     "conference",
     "applause",
@@ -581,9 +582,11 @@
       cache: "no-store",
     });
     if (!response.ok) {
+      window.CalendarHealth?.report(source, { unavailable: true });
       throw new Error("Calendar fetch failed");
     }
     const data = await response.json();
+    window.CalendarHealth?.report(source, data);
     const events = Array.isArray(data.events) ? data.events : [];
     return events.map((entry) => toCalendarEvent(entry, source)).filter(Boolean);
   };
@@ -606,7 +609,7 @@
   });
 
   const buildSchoolAddOnEvents = (letter, date) => {
-    const config = letter ? LETTER_DAY_ADDONS[letter] : null;
+    const config = letter && new Date(date) < new Date(2026, 6, 1) ? LETTER_DAY_ADDONS[letter] : null;
     if (!config) {
       return [];
     }
@@ -619,7 +622,7 @@
   };
 
   const buildStudentAddOnEvents = (letter, date) => {
-    const config = letter ? LETTER_DAY_ADDONS[letter] : null;
+    const config = letter && new Date(date) < new Date(2026, 6, 1) ? LETTER_DAY_ADDONS[letter] : null;
     const start = new Date(date);
     const build = (student) =>
       (config && config.students[student] ? config.students[student] : []).map((summary) => ({
@@ -1215,6 +1218,7 @@
 
 
   const setWeatherUnavailable = (message) => {
+    window.RainGlass?.setWeather(null);
     if (tempEl) {
       tempEl.textContent = "--°";
     }
@@ -1278,6 +1282,7 @@
   };
 
   const applyWeather = (current, forecast) => {
+    window.RainGlass?.setWeather(current?.weather?.[0]?.id);
     const description =
       current && current.weather && current.weather[0] && current.weather[0].description
         ? current.weather[0].description

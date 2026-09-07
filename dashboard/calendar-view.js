@@ -13,6 +13,7 @@
     "closed",
     "5th",
     "6th",
+    "7th", "8th", "grade", "orientation", "first day", "final day", "early dismissal",
     "all schools",
     "conference",
     "applause",
@@ -70,7 +71,7 @@
   };
 
   const state = {
-    mode: "year",
+    mode: "month",
     monthDate: new Date(),
     year: new Date().getFullYear(),
     settings: { filters: DEFAULT_FILTERS },
@@ -215,6 +216,7 @@
     return {
       id: entry.id,
       summary: entry.details,
+      allDay: !entry.time,
       start,
       end: end || start,
       source: "custom",
@@ -254,10 +256,16 @@
     if (Number.isNaN(start.getTime())) {
       return null;
     }
+    let end = entry.endDate
+      ? new Date(`${entry.endDate}T${entry.endTime || "00:00"}:00${entry.endIsUtc ? "Z" : ""}`)
+      : start;
+    if (entry.endExclusive) end = new Date(end.getTime() - 1);
+    if (Number.isNaN(end.getTime()) || end < start) end = start;
     return {
+      ...entry,
       summary: entry.summary || "",
       start,
-      end: start,
+      end,
       source: entry.source || source,
     };
   };
@@ -272,14 +280,16 @@
     return entries.map((entry) => toCustomEvent(entry)).filter(Boolean);
   };
 
-  const fetchCalendarEvents = async (source) => {
-    const response = await fetch(`${CALENDAR_API_URL}?source=${encodeURIComponent(source)}`, {
+  const fetchCalendarEvents = async (source, force = false) => {
+    const response = await fetch(`${CALENDAR_API_URL}?source=${encodeURIComponent(source)}${force ? "&refresh=1" : ""}`, {
       cache: "no-store",
     });
     if (!response.ok) {
+      window.CalendarHealth?.report(source, { unavailable: true });
       throw new Error("Calendar fetch failed");
     }
     const data = await response.json();
+    window.CalendarHealth?.report(source, data);
     const events = Array.isArray(data.events) ? data.events : [];
     return events.map((entry) => toCalendarEvent(entry, source)).filter(Boolean);
   };
@@ -341,10 +351,10 @@
   const deriveSummerBreak = (events) => {
     const schoolEvents = events.filter((event) => event.source === "school");
     const lastDay = schoolEvents
-      .filter((event) => /last day of school/i.test(event.summary || ""))
+      .filter((event) => /last day of school|final day for students/i.test(event.summary || ""))
       .sort((a, b) => b.start - a.start)[0];
     const firstDay = schoolEvents
-      .filter((event) => /first day of school/i.test(event.summary || ""))
+      .filter((event) => /first day of school|opening day for students/i.test(event.summary || ""))
       .sort((a, b) => a.start - b.start)[0];
     if (!lastDay || !firstDay) {
       return null;
@@ -448,13 +458,21 @@
       dayEnd.setHours(23, 59, 59, 999);
 
       const eventsForDay = events.filter((event) => event.start <= dayEnd && event.end >= dayStart);
-      const maxEvents = 3;
+      const maxEvents = eventsForDay.length;
       eventsForDay.slice(0, maxEvents).forEach((event) => {
         const chip = document.createElement("div");
         chip.className = `calendar-event-chip ${eventClass(event)}`;
         const multiDay = dayKey(event.start) !== dayKey(event.end);
-        chip.textContent = `${event.summary || "Event"}${multiDay ? " ->" : ""}`;
+        const time = !event.allDay && (event.startTime || event.source === "custom") ? event.start.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) + " · " : "";
+        chip.textContent = `${time}${event.summary || "Event"}${multiDay ? " →" : ""}`;
         chip.title = multiDay ? `${event.summary} (${formatRangeLabel(event.start, event.end)})` : event.summary;
+        if (event.location) {
+          const directions = document.createElement("a");
+          directions.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`;
+          directions.target = "_blank"; directions.rel = "noopener"; directions.textContent = "Directions ↗"; directions.className = "event-directions";
+          chip.appendChild(directions);
+        }
+        if (event.end > event.start && !event.allDay) chip.title += ` · Ends ${event.end.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`;
         dayEvents.appendChild(chip);
       });
       if (eventsForDay.length > maxEvents) {
@@ -574,7 +592,6 @@
     if (!calendarStatus) {
       return;
     }
-    calendarStatus.textContent = "";
     const filters = state.settings.filters || DEFAULT_FILTERS;
     updateLegendFilters(filters);
     let events = applyFilters(state.cachedEvents, filters);
@@ -667,13 +684,13 @@
       const [settings, custom, school, hockey, letter, qgenda] = await Promise.allSettled([
         fetchSettings(),
         fetchCustomEvents(),
-        fetchCalendarEvents("school"),
-        fetchCalendarEvents("hockey"),
-        fetchCalendarEvents("letter"),
-        fetchCalendarEvents("qgenda"),
+        fetchCalendarEvents("school", force),
+        fetchCalendarEvents("hockey", force),
+        fetchCalendarEvents("letter", force),
+        fetchCalendarEvents("qgenda", force),
       ]);
 
-      state.settings = settings.status === "fulfilled" ? settings.value : state.settings;
+      if (!state.localFilters) state.settings = settings.status === "fulfilled" ? settings.value : state.settings;
 
       const merged = []
         .concat(custom.status === "fulfilled" ? custom.value : [])
@@ -685,7 +702,9 @@
       state.cachedEvents = merged;
       state.cachedAt = now;
       if (calendarStatus) {
-        calendarStatus.textContent = "";
+        const failed = [custom, school, hockey, letter, qgenda]
+          .map((result, i) => result.status === "rejected" ? ["Family", "School", "Hockey", "Letter days", "QGenda"][i] : null).filter(Boolean);
+        calendarStatus.textContent = failed.length ? `Could not refresh: ${failed.join(", ")}. Try Refresh.` : "";
       }
       updateFilterUI();
       renderView();
@@ -702,10 +721,8 @@
     }
     const session = loadSession();
     const isAdmin = session && session.role === "admin";
-    calendarFilters.hidden = !isAdmin;
-    if (!isAdmin) {
-      return;
-    }
+    calendarFilters.hidden = false;
+    if (calendarFiltersSave) calendarFiltersSave.hidden = !isAdmin;
     const filters = state.settings.filters || DEFAULT_FILTERS;
     calendarFiltersForm.querySelectorAll("input[type='checkbox']").forEach((input) => {
       const key = input.getAttribute("data-filter");
@@ -804,6 +821,7 @@
 
   if (calendarFiltersForm) {
     calendarFiltersForm.addEventListener("change", () => {
+      state.localFilters = true;
       state.settings = {
         ...state.settings,
         filters: collectFiltersFromUI(),
@@ -868,6 +886,18 @@
     }
   });
 
+  const navigate = (step) => {
+    if (step === 0) { state.monthDate = new Date(); state.year = state.monthDate.getFullYear(); }
+    else if (state.mode === "month") { state.monthDate = new Date(state.monthDate.getFullYear(), state.monthDate.getMonth() + step, 1); state.year = state.monthDate.getFullYear(); }
+    else { state.year += step; state.monthDate = new Date(state.year, state.monthDate.getMonth(), 1); }
+    calendarMonthPicker.value = `${state.monthDate.getFullYear()}-${String(state.monthDate.getMonth()+1).padStart(2,"0")}`;
+    calendarYearPicker.value = state.year; renderView();
+  };
+  document.getElementById("calendar-prev")?.addEventListener("click", () => navigate(-1));
+  document.getElementById("calendar-next")?.addEventListener("click", () => navigate(1));
+  document.getElementById("calendar-today")?.addEventListener("click", () => navigate(0));
+  document.getElementById("calendar-refresh")?.addEventListener("click", () => refreshData(true));
+  navigate(0);
   setCalendarMode(state.mode);
   syncCalendarFromHash();
   setInterval(() => {
