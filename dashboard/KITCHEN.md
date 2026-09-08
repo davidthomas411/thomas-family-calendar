@@ -1,7 +1,11 @@
 # Family kitchen
 
-The family-facing navigation is Meals, Pantry, and Shopping list. Pantry groups
-the Pantry, Fridge, and Freezer columns. Copy uses everyday wording: Back to
+The family-facing navigation is Meals, Pantry, and Shopping list. Pantry is a
+single compact list grouped by food type, such as meat, cheese, dairy, produce
+and staples. Short names combine variants like yoghurt in one expandable row.
+Package quantities, locations, dates, notes and editing controls appear only
+when expanded. Labels and categories can be changed in the item editor without
+renaming recipe ingredients or losing individual packages. Copy uses everyday wording: Back to
 ideas, Update what’s left in the pantry, and Put groceries away.
 
 The owner supplied a GIANT receipt for September 7, 2026 and requested its import.

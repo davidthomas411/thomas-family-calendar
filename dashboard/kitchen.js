@@ -60,6 +60,7 @@
     openForm(kind==='stock'?(id?'Edit item':'Add to pantry'):(id?'Edit shopping item':'Add to shopping list'),`${field('Item','name',item.name,'text','required maxlength="200"')}
       <div class="kitchen-form-row">${field('Quantity','quantity',item.quantity,'number',`min="${kind==='stock'?0:0.001}" max="100000" step="any" required`)}<label>Unit<select name="unit">${options(core.units,item.unit)}</select></label></div>
       <label>${kind==='stock'?'Stored in':'Put away in'}<select name="place">${options(core.places,item.place)}</select></label>
+      ${kind==='stock'?`${field('Short name in the pantry','label',core.pantryInfo(item).label,'text','maxlength="200"')}<label>Group<select name="category">${options(core.categories,core.pantryInfo(item).category)}</select></label>`:''}
       ${kind==='stock'?field('Best-before date (optional)','bestBefore',item.bestBefore,'date'):''}
       <label>Notes (optional)<textarea name="notes" maxlength="500">${escape(item.notes)}</textarea></label>`,form=>change(kind==='stock'?'stock-save':'grocery-save',{id,...Object.fromEntries(form),checked:item.checked||false},kind==='stock'?'Pantry updated.':'Shopping list updated.'));
   }
@@ -67,6 +68,22 @@
   function cook(id){const m=board.data.meals.find(x=>x.id===id);const missing=core.shortages(board.data,[m]);openForm(`Cooked: ${m.name}`,`<p>Save this meal to Meals we’ve had.</p><label class="kitchen-check"><input type="checkbox" name="useIngredients" ${m.ingredients.length?'checked':''} ${m.ingredients.length?'':'disabled'}>Update what’s left in the pantry</label>${m.ingredients.length?`<ul class="kitchen-ingredients">${m.ingredients.map(i=>`<li>${escape(i.name)} · ${amount(i)}</li>`).join('')}</ul>`:'<p class="kitchen-hint">Add ingredients to this meal to update the pantry when you cook.</p>'}${missing.length?'<p class="kitchen-hint">A few ingredients aren’t in the pantry yet. We’ll update the ones you’ve added.</p>':''}`,form=>change('meal-cook',{id,useIngredients:form.has('useIngredients')},'Saved to Meals we’ve had.'));}
   function remove(kind,id){openForm('Remove this item?',`<p>This removes it from the kitchen${kind==='meal'?' and the calendar':''}.</p>`,()=>change(`${kind}-delete`,{id},'Item removed.'));}
   const button=(action,id,label)=>`<button type="button" data-action="${action}" data-id="${id}">${label}</button>`;
+  function pantryList(items,filter) {
+    const groups=new Map();
+    for(const item of items){
+      const info=core.pantryInfo(item);if(!filter({...item,name:`${item.name} ${info.label} ${info.category}`}))continue;
+      const groupKey=`${info.category}|${info.label.toLowerCase()}`;
+      if(!groups.has(groupKey))groups.set(groupKey,{...info,key:groupKey,items:[]});
+      groups.get(groupKey).items.push(item);
+    }
+    const rows=[...groups.values()];
+    if(!rows.length)return '<p class="kitchen-empty">'+(search?'No matches.':'Add what you have at home.')+'</p>';
+    return `<div class="pantry-groups">${core.categories.map(category=>{
+      const list=rows.filter(g=>g.category===category).sort((a,b)=>a.label.localeCompare(b.label));
+      if(!list.length)return '';
+      return `<section class="pantry-group"><h2>${escape(category)}</h2>${list.map(group=>`<details class="pantry-item" data-pantry-key="${escape(group.key)}"><summary><span>${escape(group.label)}</span><span class="pantry-expand" aria-hidden="true">+</span></summary><div class="pantry-item-details">${group.items.map(item=>`<div class="pantry-package">${item.name!==group.label?`<strong>${escape(item.name)}</strong>`:''}<p>${amount(item)} · ${item.place}${item.quantity===0?' · All gone':''}</p>${item.bestBefore?`<p>Best before ${pretty(item.bestBefore)}</p>`:''}${item.notes?`<p class="kitchen-note">${escape(item.notes)}</p>`:''}<div class="kitchen-card-actions">${button('stock-edit',item.id,'Edit')}${button('stock-use',item.id,'Use some')}${button('stock-buy',item.id,'Buy more')}${button('stock-delete',item.id,'Remove')}</div></div>`).join('')}</div></details>`).join('')}</section>`;
+    }).join('')}</div>`;
+  }
   function mealCard(m){
     const missing=core.shortages(board.data,[m]);
     return `<article class="kitchen-meal" draggable="${m.status!=='cooked'}" data-meal-id="${m.id}">
@@ -79,6 +96,11 @@
   }
   function render(){
     if(!board)return;const s=board.data;const end=shift(week,6);const filter=x=>core.key([x.name,x.notes,...(x.ingredients||[]).map(i=>i.name)].join(' ')).includes(core.key(search));
+    const openPantry=new Set([...$('meals-list').querySelectorAll('details[open][data-pantry-key]')].map(el=>el.dataset.pantryKey));
+    $('meals-view').classList.toggle('pantry-active',tab==='stock');
+    $('kitchen-overview').hidden=tab==='stock';
+    document.querySelector('.meals-week').hidden=tab!=='meals';
+    $('kitchen-search').placeholder=tab==='stock'?'Find something in the pantry':'Find a meal or ingredient';
     $('meals-week-picker').value=week;$('meals-week-label').textContent=`${pretty(week)} – ${pretty(end)}`;
     $('meal-preview-title').textContent=s.meals.filter(m=>m.date===today()).map(m=>m.name).join(' + ')||'No dinner planned';
     const due=s.stock.filter(x=>x.quantity>0&&x.bestBefore&&x.bestBefore<=shift(today(),3)).sort((a,b)=>a.bestBefore.localeCompare(b.bestBefore));
@@ -97,13 +119,16 @@
       if(other.length)html+=`<details class="kitchen-other"><summary>Meals on other dates (${other.length})</summary><div class="kitchen-board">${other.map(mealCard).join('')}</div></details>`;
       html+='<p class="kitchen-hint">Drag a meal onto a day, or tap Plan.</p>';
     }else if(tab==='stock'){
-      html='<div class="kitchen-board">';for(const place of core.places){const items=s.stock.filter(i=>i.place===place&&filter(i)).sort((a,b)=>(a.bestBefore||'9999').localeCompare(b.bestBefore||'9999'));html+=`<section class="kitchen-lane"><h2>${place}<span>${items.length}</span></h2>${items.map(i=>`<article class="kitchen-meal ${i.quantity===0?'is-empty-stock':''}"><h3>${escape(i.name)}</h3><p>${amount(i)}${i.quantity===0?' · All gone':''}</p>${i.bestBefore?`<p class="${i.bestBefore<=shift(today(),3)?'kitchen-use-first':'kitchen-hint'}">${i.bestBefore<today()?'Check date':'Use by'} ${pretty(i.bestBefore)}</p>`:''}${i.notes?`<p class="kitchen-note">${escape(i.notes)}</p>`:''}<div class="kitchen-card-actions">${button('stock-edit',i.id,'Edit')}${button('stock-use',i.id,'Use some')}${button('stock-buy',i.id,'Buy more')}${button('stock-delete',i.id,'Remove')}</div></article>`).join('')||`<p class="kitchen-empty">Add what’s in your ${place.toLowerCase()}.</p>`}</section>`;}html+='</div><p class="kitchen-hint">Add each package separately if it has a different best-before date.</p>';
+      html=pantryList(s.stock.filter(i=>i.quantity>0),filter);
+      const used=s.stock.filter(i=>i.quantity===0);
+      if(used.length)html+=`<details class="pantry-used"><summary>Used up</summary>${pantryList(used,filter)}</details>`;
     }else{
       html=`<div class="kitchen-shopping-actions"><button class="action-button" data-action="shop-meals">Add what we need this week</button><button data-action="copy-list">Copy list</button><a class="action-link" href="https://giantfoodstores.com/" target="_blank" rel="noopener noreferrer">Shop at GIANT ↗</a><button data-action="put-away">Put groceries away</button></div><p class="kitchen-hint">Tap Find at GIANT to choose a product and add it to your cart there. When the order arrives, check off what you received and tap Put groceries away.</p><div class="kitchen-groceries">`;
       for(const g of s.groceries.filter(filter).sort((a,b)=>Number(a.checked)-Number(b.checked)||a.name.localeCompare(b.name))){html+=`<article class="kitchen-grocery ${g.checked?'is-checked':''}"><label><input type="checkbox" data-grocery-check="${g.id}" ${g.checked?'checked':''}><span><strong>${escape(g.name)}</strong><small>${amount(g)} · ${g.place}${g.notes?' · '+escape(g.notes):''}</small></span></label><div class="kitchen-card-actions"><a href="https://giantfoodstores.com/product-search/${encodeURIComponent(g.name)}" target="_blank" rel="noopener noreferrer">Find at GIANT ↗</a>${button('grocery-edit',g.id,'Edit')}${button('grocery-delete',g.id,'Remove')}</div></article>`;}
       html+=(s.groceries.filter(filter).length?'':'<p class="kitchen-empty">Add the usual groceries, or make a list from this week’s meals.</p>')+'</div>';
     }
     $('meals-list').innerHTML=html;
+    $('meals-list').querySelectorAll('[data-pantry-key]').forEach(el=>{if(openPantry.has(el.dataset.pantryKey))el.setAttribute('open','');});
   }
   document.addEventListener('click',async e=>{
     const t=e.target.closest('[data-kitchen-tab]');if(t){tab=t.dataset.kitchenTab;render();return;}

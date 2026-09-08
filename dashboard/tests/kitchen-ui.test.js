@@ -15,6 +15,11 @@ test('kitchen renders shared food and groceries, keeps tonight independent of se
   assert.match(document.getElementById('meals-list').textContent,/Soup <script>/);assert.equal(document.querySelectorAll('.kitchen-meal script').length,0);
   document.getElementById('kitchen-next').click();assert.equal(document.getElementById('meal-preview-title').textContent,'Soup <script>');
   document.querySelector('.kitchen-tabs [data-kitchen-tab="stock"]').click();assert.match(document.getElementById('meals-list').textContent,/Carrots/);
+  assert.equal(document.querySelector('.pantry-group h2').textContent,'Vegetables');
+  assert.equal(document.querySelector('.pantry-item summary').textContent,'Carrots+');
+  assert.equal(document.querySelector('.pantry-item').hasAttribute('open'),false);
+  assert.equal(document.querySelector('.meals-week').hidden,true);
+  assert.equal(document.getElementById('kitchen-overview').hidden,true);
   document.querySelector('.kitchen-tabs [data-kitchen-tab="groceries"]').click();assert.match(document.getElementById('meals-list').textContent,/Milk & cream/);
   assert.equal(document.querySelector('.kitchen-grocery a').getAttribute('href'),'https://giantfoodstores.com/product-search/Milk%20%26%20cream');
   document.getElementById('kitchen-add').click();assert.equal(document.getElementById('login-modal').getAttribute('aria-hidden'),'false');

@@ -78,5 +78,16 @@
     float alpha = max(fog*.12, max(height*.85,running.y*.22)) * region * uStrength;
     color = vec4(glass,alpha);
   }`;
-  window.RainGlassShaders = { vertex, fragment };
+  // GLSL ES 1.00 renders the same glass on WebGL 1, including Safari.
+  const vertexWebGL1=vertex.replace('#version 300 es','').replace('in vec2 aPosition','attribute vec2 aPosition').replace('out vec2 vUv','varying vec2 vUv');
+  const fragmentWebGL1=fragment.replace('#version 300 es','').replace('in vec2 vUv','varying vec2 vUv').replace('out vec4 color;','').replace(/\bcolor\b/g,'gl_FragColor').replace(/\btexture\(/g,'texture2D(');
+  const fragmentPortable=fragmentWebGL1.replace('vec2 normal = vec2(dFdx(height),-dFdy(height)) * 4.;',`vec2 delta = vec2(.75,0.);
+    float right = max(beads(p+delta),runners(p+delta).x);
+    float left = max(beads(p-delta),runners(p-delta).x);
+    float below = max(beads(p+delta.yx),runners(p+delta.yx).x);
+    float above = max(beads(p-delta.yx),runners(p-delta.yx).x);
+    vec2 normal = vec2(right-left,below-above) * (1.-wipe) * 2.667;`);
+  window.RainGlassShaders = { vertex, fragment, vertexWebGL1,
+    fragmentWebGL1:'#extension GL_OES_standard_derivatives : enable\n'+fragmentWebGL1,
+    fragmentPortable };
 })();

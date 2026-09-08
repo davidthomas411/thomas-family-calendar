@@ -5,9 +5,10 @@ Implements the brief in issue #1, preserving the family dashboard and the
 
 The effect covers the full app, including calendar and kitchen views. WebGL2
 provides beads, faster running drops, normals, sampled-image refraction, and
-light condensation. Safari uses an animated Canvas 2D renderer to avoid WebKit
-context-loss and DOM-snapshot dependencies. That renderer provides highlighted
-beads, rivulets and persistent wiping, but does not optically refract the DOM.
+light condensation. Safari uses a WebGL 1 translation of the same refractive
+shader, rather than being forced onto Canvas 2D. It uses standard derivatives
+when supported, or finite differences otherwise. Other browsers try WebGL 2
+and then the compatible WebGL 1 path. Both sample the dashboard texture.
 
 WebGL cannot directly sample HTML. A locally bundled, MIT-licensed html2canvas
 captures the existing dashboard to an in-memory texture only when needed:
@@ -25,18 +26,21 @@ the brief's persistent spatial mask without an additional GPU framebuffer.
 The render loop is capped at 30fps, effective DPR at 1.25, and the drawing
 buffer at approximately 1.6 million pixels. Hidden tabs pause rendering.
 Reduced motion freezes running drops and automatic recovery, while direct
-wiping still works. Unsupported WebGL2 and failed captures use the same animated
-Canvas renderer as Safari. The fallback wipe alpha texture is reused between
-mask updates, avoiding a per-frame image-data conversion.
+wiping still works. Canvas 2D is only the last resort when neither shader can
+start or graphics recovery repeatedly fails. Failed DOM captures keep the shader
+and last usable texture; a sky gradient supplies the initial texture while DOM
+capture retries. Safari snapshots use a lower capture scale to reduce memory.
 
 Resource cleanup covers listeners, observers, RAF, timers, textures, programs,
 buffers and canvases; repeated initialization destroys the previous instance.
-Context loss switches to the animated Canvas renderer.
+Context loss pauses drawing. Restoration rebuilds the shader; if no restoration
+arrives after 1.5 seconds, a new canvas retries the full renderer (bounded to
+two recovery attempts). Destroy also cancels pending recovery.
 
 No rain sounds, lightning, demo settings panels, or new family-page status
 badges are added. Automatic / Preview / Off remains the only effect control.
 
 Validation: npm test and npm run check. Automated checks cover the Safari
-renderer selection, full-screen touch wiping, motion preferences, navigation,
-cleanup and unsupported WebGL. Physical Safari/iPad performance has not been
+refractive renderer selection, full-screen touch wiping, motion preferences,
+capture failure, context restoration, cleanup and unsupported WebGL. Physical Safari/iPad performance has not been
 tested in this Windows environment.
