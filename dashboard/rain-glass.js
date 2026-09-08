@@ -1,4 +1,4 @@
-/* SASASA-inspired wet window over the weather area. The DOM stays interactive.
+/* SASASA-inspired wet window across the app. The DOM stays interactive.
  * Snapshot texture -> refractive droplets/fog -> persistent painted wipe mask.
  * Public API remains setWeather(code) / setMode(auto|off|preview).
  */
@@ -10,10 +10,11 @@
   canvas.id = 'rain-glass';
   canvas.setAttribute('aria-hidden','true');
   canvas.setAttribute('data-html2canvas-ignore','true');
-  Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'7'});
+  Object.assign(canvas.style,{position:'fixed',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'10'});
   sky.appendChild(canvas);
   const mask = document.createElement('canvas');
   const maskCtx = mask.getContext('2d');
+  const eraseCanvas=document.createElement('canvas');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const removers = [];
   let gl, program, buffer, background, erased, uniforms, fallback;
@@ -23,7 +24,6 @@
   let strength=0, lastPointer=null, dirtyMask=true, resizeObserver, intersectionObserver;
   try { mode=localStorage.getItem('rain-glass-mode')==='off'?'off':'auto'; } catch {}
   const active = () => !destroyed && !lost && visible && !document.hidden
-    && !['#calendar','#meals'].includes(location.hash)
     && (mode==='preview'||(mode==='auto'&&wet));
   function on(target,type,listener,options) {
     target.addEventListener(type,listener,options);
@@ -38,6 +38,9 @@
     background=erased=buffer=program=null;
   }
   function initGL() {
+    // WebKit can lose WebGL contexts when an iPad is backgrounded. Its Canvas
+    // renderer keeps rain and wiping available without a GPU or DOM snapshot.
+    if (typeof navigator!=='undefined' && /Apple/.test(navigator.vendor || '')) return false;
     gl=canvas.getContext('webgl2',{alpha:true,antialias:false,premultipliedAlpha:false,depth:false,stencil:false});
     if (!gl || !window.RainGlassShaders) return false;
     const compile=(type,source)=>{
@@ -81,13 +84,27 @@
     if (!fallback) return;
     fallback.clearRect(0,0,width,height);
     const mist=fallback.createLinearGradient(0,0,0,region[3]);
-    mist.addColorStop(0,'rgba(190,210,225,.17)'); mist.addColorStop(.8,'rgba(190,210,225,.1)'); mist.addColorStop(1,'rgba(190,210,225,0)');
+    mist.addColorStop(0,'rgba(190,210,225,.08)'); mist.addColorStop(.8,'rgba(190,210,225,.04)'); mist.addColorStop(1,'rgba(190,210,225,.07)');
     fallback.fillStyle=mist; fallback.fillRect(region[0],0,region[2]-region[0],region[3]);
+    // Deterministic beads and moving rivulets, with no external image dependency.
+    const seed=n=>{const x=Math.sin(n*127.1)*43758.5453;return x-Math.floor(x);};
+    const count=Math.min(420,Math.floor(width*height/2400));
+    for(let i=0;i<count;i++){
+      const running=i%5===0, x=seed(i+1)*width;
+      const y=(seed(i+701)*height+(running?elapsed*(24+seed(i+22)*50):0))%(height+40)-20;
+      const r=running?3+seed(i+31)*3:1+seed(i+81)*2.5;
+      if(running){const trail=fallback.createLinearGradient(x,y-55,x,y);trail.addColorStop(0,'rgba(235,248,255,0)');trail.addColorStop(1,'rgba(225,244,255,.27)');fallback.fillStyle=trail;fallback.fillRect(x-r*.3,y-55,r*.6,55);}
+      const bead=fallback.createRadialGradient(x-r*.35,y-r*.45,.2,x,y,r*1.45);
+      bead.addColorStop(0,'rgba(255,255,255,.75)');bead.addColorStop(.22,'rgba(230,247,255,.28)');bead.addColorStop(.65,'rgba(30,65,95,.13)');bead.addColorStop(.85,'rgba(230,247,255,.4)');bead.addColorStop(1,'rgba(230,247,255,0)');
+      fallback.fillStyle=bead;fallback.fillRect(x-r*1.5,y-r*1.5,r*3,r*3);
+    }
     // Mask is opaque grayscale. Convert luminance to alpha only for this fallback.
-    const image=maskCtx.getImageData(0,0,mask.width,mask.height);
-    for(let i=0;i<image.data.length;i+=4)image.data[i+3]=image.data[i];
-    const eraseCanvas=document.createElement('canvas'); eraseCanvas.width=mask.width; eraseCanvas.height=mask.height;
-    eraseCanvas.getContext('2d').putImageData(image,0,0);
+    if(dirtyMask){
+      const image=maskCtx.getImageData(0,0,mask.width,mask.height);
+      for(let i=0;i<image.data.length;i+=4)image.data[i+3]=image.data[i];
+      eraseCanvas.width=mask.width; eraseCanvas.height=mask.height;
+      eraseCanvas.getContext('2d').putImageData(image,0,0);dirtyMask=false;
+    }
     fallback.globalCompositeOperation='destination-out'; fallback.drawImage(eraseCanvas,0,0,width,height); fallback.globalCompositeOperation='source-over';
   }
   function draw() {
@@ -110,7 +127,7 @@
       if(decay>=.4){maskCtx.fillStyle=`rgba(0,0,0,${1-Math.exp(-decay/24)})`;maskCtx.fillRect(0,0,mask.width,mask.height);decay=0;dirtyMask=true;}
       draw();
     }
-    if(!reduced.matches && program)frame=requestAnimationFrame(tick);
+    if(!reduced.matches)frame=requestAnimationFrame(tick);
   }
   function start() {
     cancelAnimationFrame(frame);frame=0;last=0;lastPointer=null;
@@ -120,7 +137,7 @@
     if(reduced.matches || !program)strength=1;
     draw();
     if(!snapshot)queueCapture();
-    if(!reduced.matches && program)frame=requestAnimationFrame(tick);
+    if(!reduced.matches)frame=requestAnimationFrame(tick);
   }
   async function capture() {
     captureTimer=0;
@@ -134,10 +151,10 @@
         allowTaint:false,useCORS:false,removeContainer:true,
         ignoreElements:el=>el.id==='rain-glass'||el.classList?.contains('modal'),
       });
-      if(destroyed||lost||generation!==`${width}:${height}`)return;
+      if(destroyed||lost||!program||!gl||generation!==`${width}:${height}`)return;
       snapshot=result; upload(background,0,snapshot); draw();
       canvas.dataset.snapshot='ready';
-    } catch(error){console.warn('Rain glass snapshot unavailable.',error.message);}
+    } catch(error){console.warn('Rain glass snapshot unavailable; using animated canvas.',error.message);useFallback();resize();}
     finally{capturing=false;if(captureAgain&&!destroyed){captureAgain=false;queueCapture();}}
   }
   function queueCapture() {
@@ -154,10 +171,8 @@
     maskScale=Math.min(.5,640/Math.max(width,height));mask.width=Math.max(1,Math.round(width*maskScale));mask.height=Math.max(1,Math.round(height*maskScale));
     maskCtx.fillStyle='black';maskCtx.fillRect(0,0,mask.width,mask.height);
     if(old.width&&old.height)maskCtx.drawImage(old,0,0,mask.width,mask.height);
-    const rect=sky.getBoundingClientRect();const primary=document.querySelector('.primary-header')?.getBoundingClientRect();
-    region=[0,0,primary?Math.min(width,primary.right-rect.left+22):width,primary?Math.min(height,primary.bottom-rect.top+70):height*.42];
-    const widgets=document.querySelector('.primary-widgets')?.getBoundingClientRect();
-    controls=widgets?[widgets.left-rect.left,widgets.top-rect.top,widgets.right-rect.left,widgets.bottom-rect.top]:[0,0,0,0];
+    region=[-32,-32,width+32,height+45];
+    controls=[-100,-100,-90,-90];
     dirtyMask=true;
     if(fallback)fallback.setTransform(scale,0,0,scale,0,0);
     queueCapture();start();
@@ -179,12 +194,14 @@
     lastPointer=point;dirtyMask=true;canvas.dataset.wipes=String(Number(canvas.dataset.wipes||0)+1);
     if(reduced.matches||!program)draw();
   }
-  if(!initGL()){
+  function useFallback(){
+    releaseGL();
     // A canvas cannot switch context types once WebGL is allocated.
     if(gl){canvas.remove();const replacement=document.createElement('canvas');replacement.id='rain-glass';replacement.setAttribute('aria-hidden','true');replacement.setAttribute('data-html2canvas-ignore','true');replacement.style.cssText=canvas.style.cssText;sky.appendChild(replacement);canvas=replacement;gl=null;fallback=replacement.getContext('2d');}
     else fallback=canvas.getContext('2d');
-    canvas.dataset.renderer='static';
+    canvas.dataset.renderer='canvas2d';
   }
+  if(!initGL())useFallback();
   window.RainGlass={
     setWeather(code){wet=Number.isFinite(code)&&code>=200&&code<600;queueCapture();start();},
     setMode(value){if(!['auto','off','preview'].includes(value))return;mode=value;try{localStorage.setItem('rain-glass-mode',mode==='preview'?'auto':mode);}catch{}queueCapture();start();},
@@ -198,14 +215,15 @@
   on(sky,'pointermove',wipe,{passive:true});on(sky,'pointerdown',wipe,{passive:true});
   on(sky,'pointerleave',()=>{lastPointer=null;},{passive:true});on(sky,'pointercancel',()=>{lastPointer=null;},{passive:true});
   on(document,'visibilitychange',start);on(window,'hashchange',()=>{queueCapture();start();});
-  on(canvas,'webglcontextlost',event=>{event.preventDefault();lost=true;start();});
+  on(canvas,'webglcontextlost',event=>{event.preventDefault();lost=false;useFallback();resize();});
   on(canvas,'webglcontextrestored',()=>{lost=false;releaseGL();initGL();snapshot=null;resize();});
   on(window,'pagehide',event=>{if(!event.persisted)window.RainGlass?.destroy();else{visible=false;start();}});
   on(window,'pageshow',()=>{visible=true;start();});
   if(reduced.addEventListener)on(reduced,'change',start);else{reduced.addListener(start);removers.push(()=>reduced.removeListener(start));}
   if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resize);resizeObserver.observe(sky);}else on(window,'resize',resize);
-  if(typeof IntersectionObserver!=='undefined'){intersectionObserver=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;start();});intersectionObserver.observe(document.querySelector('.primary-header')||sky);}
-  on(document.getElementById('dashboard-view')||sky,'scroll',()=>{resize();},{passive:true});
+  on(sky,'scroll',queueCapture,{passive:true,capture:true});
+  on(sky,'click',queueCapture,{passive:true});on(sky,'change',queueCapture,{passive:true});
+  on(window,'kitchen-updated',queueCapture);
   const refreshTimer=setInterval(()=>{
     const next=[document.getElementById('time')?.textContent,document.getElementById('condition')?.textContent,document.documentElement.style.cssText].join('|');
     if(next!==signature){signature=next;queueCapture();}

@@ -24,25 +24,25 @@
     return fract(vec3((p3.x+p3.y)*p3.z, (p3.x+p3.z)*p3.y, (p3.y+p3.z)*p3.x));
   }
   float beads(vec2 p) {
-    vec2 cell = floor(p / 28.);
-    vec2 local = mod(p, 28.);
+    vec2 cell = floor(p / 24.);
+    vec2 local = mod(p, 24.);
     vec3 n = N13(cell.x * 107.45 + cell.y * 3543.654);
-    vec2 center = 5. + n.xy * 18.;
+    vec2 center = 3. + n.xy * 18.;
     float radius = .65 + n.z * n.z * 2.8;
     float d = length((local - center) / vec2(1.,1.15)) / radius;
     return (1. - smoothstep(.05, 1., d)) * step(.40, n.z);
   }
   vec2 runners(vec2 p) {
-    float column = floor(p.x / 110.);
+    float column = floor(p.x / 65.);
     vec3 n = N13(column * 75.13 + 23.);
-    float speed = (5. + n.y * 7.) * uMotion;
+    float speed = (25. + n.y * 45.) * uMotion;
     float y = mod(p.y + n.z * 420. - uTime * speed, 420.);
-    float x = mod(p.x,110.) - (20. + n.x * 70.);
+    float x = mod(p.x,65.) - (10. + n.x * 45.);
     x += sin(p.y * .015 + n.z * 7.) * 1.2;
     float d = length(vec2(x / 4.3, (y - 365.) / 7.5));
     float drop = 1. - smoothstep(.0,1.,d);
     float trail = (1.-smoothstep(.5,2.1,abs(x))) * smoothstep(265.,345.,y) * (1.-smoothstep(358.,368.,y));
-    return vec2(drop,trail) * step(.28,n.y);
+    return vec2(drop,trail);
   }
   void main() {
     vec2 p = vec2(vUv.x, 1.-vUv.y) * uSize;
@@ -75,7 +75,7 @@
     float specular = max(0.,dot(normal,normalize(vec2(-.6,.8))));
     float shadow = max(0.,dot(normal,normalize(vec2(.6,-.8))));
     glass += vec3(specular*.20-shadow*.10) * (1.-wipe);
-    float alpha = max(fog*.44, height*.70) * region * uStrength;
+    float alpha = max(fog*.12, max(height*.85,running.y*.22)) * region * uStrength;
     color = vec4(glass,alpha);
   }`;
   window.RainGlassShaders = { vertex, fragment };

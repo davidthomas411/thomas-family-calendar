@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, viewport-fit=cover" />
   <title>Thomas Family Calendar</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="kitchen.css" />
 </head>
 <body>
   <div id="sky">
@@ -35,7 +36,7 @@
               <button id="meal-preview" class="meal-preview" type="button">
                 <div class="meal-label">Dinner tonight</div>
                 <div id="meal-preview-title" class="meal-title">No dinner planned</div>
-                <div class="meal-link">Meal plan</div>
+                <div class="meal-link">Open kitchen →</div>
               </button>
             </div>
           </div>
@@ -102,18 +103,32 @@
       <div class="meals-card">
         <div class="meals-header">
           <div>
-            <div class="meals-title">Meal Plan</div>
+            <h1 class="meals-title">Family kitchen</h1>
             <div class="meals-week">
               <span id="meals-week-label">Week of</span>
-              <input id="meals-week-picker" type="date" />
+              <button id="kitchen-prev" class="text-button" aria-label="Previous week">←</button>
+              <input id="meals-week-picker" type="date" aria-label="Meal planning week" />
+              <button id="kitchen-next" class="text-button" aria-label="Next week">→</button>
+              <button id="kitchen-today" class="text-button">This week</button>
             </div>
           </div>
           <div class="meals-actions">
             <button id="meals-back" class="action-button" type="button">Back to Dashboard</button>
           </div>
         </div>
-        <div id="meals-status" class="meals-status"></div>
-        <div id="meals-list" class="meals-list" aria-live="polite"></div>
+        <div id="kitchen-overview" class="kitchen-overview"></div>
+        <nav class="kitchen-tabs" aria-label="Kitchen views">
+          <button data-kitchen-tab="meals" aria-pressed="true">Meal board</button>
+          <button data-kitchen-tab="stock" aria-pressed="false">Food on hand</button>
+          <button data-kitchen-tab="groceries" aria-pressed="false">Grocery list</button>
+        </nav>
+        <div class="kitchen-toolbar">
+          <input id="kitchen-search" type="search" placeholder="Find a meal or ingredient" aria-label="Search kitchen" />
+          <button id="kitchen-add" class="action-button">Add meal</button>
+          <button id="kitchen-refresh" class="text-button">Refresh</button>
+        </div>
+        <div id="meals-status" class="meals-status" role="status" aria-live="polite"></div>
+        <div id="meals-list" class="meals-list"></div>
       </div>
     </section>
 
@@ -285,7 +300,8 @@
   <script src="rain-glass-shaders.js"></script>
   <script src="rain-glass.js"></script><script src="dashboard-tools.js"></script>
   <script src="weather.js"></script>
-  <script src="meals.js"></script>
+  <script src="kitchen-core.js"></script>
+  <script src="kitchen.js"></script>
   <script src="todos.js"></script>
   <script src="calendar-view.js"></script>
 </body>

@@ -1,0 +1,21 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const {parseHTML}=require('linkedom');
+const core=require('../kitchen-core');
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+test('kitchen renders shared food and groceries, keeps tonight independent of selected week, and gates editing',async()=>{
+  const {window,document}=parseHTML(fs.readFileSync(require.resolve('../index.html'),'utf8'));
+  const d=new Date(),today=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const state={version:0,data:{meals:[{id:'m1',name:'Soup <script>',date:today,status:'planned',ingredients:[],notes:'',url:'',favorite:false,cookedAt:''}],stock:[{id:'s1',name:'Carrots',quantity:2,unit:'each',place:'Fridge',bestBefore:today,notes:''}],groceries:[{id:'g1',name:'Milk & cream',quantity:1,unit:'l',place:'Fridge',notes:'',checked:false}]}};
+  window.KitchenCore=core;
+  const ctx={window,document,console,localStorage:{getItem:()=>null},location:{hash:'#meals'},fetch:async()=>({ok:true,json:async()=>state}),setInterval:()=>1,Event:window.Event,FormData};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../kitchen.js'),'utf8'),ctx);await settle();
+  assert.match(document.getElementById('meals-list').textContent,/Soup <script>/);assert.equal(document.querySelectorAll('.kitchen-meal script').length,0);
+  document.getElementById('kitchen-next').click();assert.equal(document.getElementById('meal-preview-title').textContent,'Soup <script>');
+  document.querySelector('.kitchen-tabs [data-kitchen-tab="stock"]').click();assert.match(document.getElementById('meals-list').textContent,/Carrots/);
+  document.querySelector('.kitchen-tabs [data-kitchen-tab="groceries"]').click();assert.match(document.getElementById('meals-list').textContent,/Milk & cream/);
+  assert.equal(document.querySelector('.kitchen-grocery a').getAttribute('href'),'https://giantfoodstores.com/product-search/Milk%20%26%20cream');
+  document.getElementById('kitchen-add').click();assert.equal(document.getElementById('login-modal').getAttribute('aria-hidden'),'false');
+});

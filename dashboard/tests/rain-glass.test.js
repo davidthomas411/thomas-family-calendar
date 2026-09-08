@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const {parseHTML}=require('linkedom');
 const code=fs.readFileSync(require.resolve('../rain-glass.js'),'utf8');
-function setup({reduced=false,webgl=true}={}) {
+function setup({reduced=false,webgl=true,safari=false}={}) {
   const {window,document}=parseHTML('<html><body><div id="sky"><div id="dashboard-view"><div class="primary-header"><div class="primary-widgets"></div></div><button id="button">Calendar</button></div></div></body></html>');
   const sky=document.getElementById('sky');
   Object.defineProperties(sky,{clientWidth:{value:1180,configurable:true},clientHeight:{value:820,configurable:true}});
@@ -33,7 +33,7 @@ function setup({reduced=false,webgl=true}={}) {
   const media=new window.EventTarget();media.matches=reduced;
   window.RainGlassShaders={vertex:'vertex',fragment:'fragment'};
   window.html2canvas=async()=>document.createElement('canvas');
-  const context={window,document,location:{hash:''},localStorage:{getItem:()=>null,setItem(){}},devicePixelRatio:3,matchMedia:()=>media,console,Uint8Array,Float32Array,Math,
+  const context={window,document,navigator:{vendor:safari?'Apple Computer, Inc.':''},location:{hash:''},localStorage:{getItem:()=>null,setItem(){}},devicePixelRatio:3,matchMedia:()=>media,console,Uint8Array,Float32Array,Math,
     requestAnimationFrame:fn=>{const id=++seq;raf.set(id,fn);return id;},cancelAnimationFrame:id=>raf.delete(id),
     setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
     setInterval:fn=>{const id=++seq;intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),
@@ -58,13 +58,22 @@ test('reduced motion, hidden views, reinitialization and destroy release animati
   env.media.matches=false;env.media.dispatchEvent(new env.window.Event('change'));assert.equal(env.raf.size,1);
   env.document.hidden=true;env.document.dispatchEvent(new env.window.Event('visibilitychange'));assert.equal(env.raf.size,0);
   env.document.hidden=false;env.document.dispatchEvent(new env.window.Event('visibilitychange'));assert.equal(env.raf.size,1);
-  env.context.location.hash='#calendar';env.window.dispatchEvent(new env.window.Event('hashchange'));assert.equal(env.raf.size,0);assert.equal(env.document.getElementById('rain-glass').hidden,true);
+  env.context.location.hash='#calendar';env.window.dispatchEvent(new env.window.Event('hashchange'));assert.equal(env.raf.size,1);assert.equal(env.document.getElementById('rain-glass').hidden,false);
+  env.context.location.hash='#meals';env.window.dispatchEvent(new env.window.Event('hashchange'));assert.equal(env.raf.size,1);assert.equal(env.document.getElementById('rain-glass').hidden,false);
   env.run();assert.equal(env.document.querySelectorAll('#rain-glass').length,1);
   env.window.RainGlass.destroy();assert.equal(env.resources.size,0);assert.equal(env.raf.size,0);assert.equal(env.timers.size,0);assert.equal(env.intervals.size,0);assert.equal(env.document.querySelectorAll('#rain-glass').length,0);
 });
-test('unsupported WebGL falls back to static mist without starting an animation loop',()=>{
+test('unsupported WebGL falls back to animated rain',()=>{
   const env=setup({webgl:false});env.window.RainGlass.setMode('preview');
-  assert.equal(env.document.getElementById('rain-glass').dataset.renderer,'static');assert.equal(env.raf.size,0);
+  assert.equal(env.document.getElementById('rain-glass').dataset.renderer,'canvas2d');assert.equal(env.raf.size,1);
   env.window.RainGlass.setMode('off');assert.equal(env.document.getElementById('rain-glass').hidden,true);
   env.window.RainGlass.destroy();
+});
+test('Safari gets visible rain without WebGL or snapshots, with wiping at the bottom of the app',()=>{
+  const env=setup({safari:true});env.window.RainGlass.setMode('preview');
+  assert.equal(env.document.getElementById('rain-glass').dataset.renderer,'canvas2d');assert.equal(env.resources.size,0);assert.ok(env.paints()>100);
+  const event=new env.window.Event('pointermove',{bubbles:true});Object.assign(event,{clientX:1000,clientY:780,pointerId:1,pointerType:'touch'});env.sky.dispatchEvent(event);
+  assert.equal(env.document.getElementById('rain-glass').dataset.wipes,'1');
+  env.media.matches=true;env.media.dispatchEvent(new env.window.Event('change'));assert.equal(env.raf.size,0);
+  env.window.RainGlass.destroy();assert.equal(env.raf.size,0);
 });
