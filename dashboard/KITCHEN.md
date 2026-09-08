@@ -1,5 +1,16 @@
 # Family kitchen
 
+The family-facing navigation is Meals, Pantry, and Shopping list. Pantry groups
+the Pantry, Fridge, and Freezer columns. Copy uses everyday wording: Back to
+ideas, Update what’s left in the pantry, and Put groceries away.
+
+The owner supplied a GIANT receipt for September 7, 2026 and requested its import.
+`lib/kitchen-receipt-import.js` adds its 48 delivered product lines under the
+existing board row lock. An import marker prevents repeats, including after a
+family member removes or uses an item. It preserves existing contents, excludes
+undelivered bagels/gyro bread, and keeps measured weights and package details.
+No best-before dates, address, account or payment details are imported.
+
 The home screen's dinner button opens `#meals`. The kitchen has a meal board,
 pantry/fridge/freezer inventory, and a shared grocery list. Family sign-in is
 required for changes. It starts with existing scheduled meal events and no

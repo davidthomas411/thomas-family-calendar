@@ -3,6 +3,7 @@ const {pool}=require('../lib/db');
 const {verifyToken}=require('../lib/auth');
 const core=require('../kitchen-core');
 const {saveJsonCache}=require('../lib/blob-cache');
+const {importReceipt}=require('../lib/kitchen-receipt-import');
 let schema;
 function ensureSchema(){
   if(!schema)schema=pool.query(`CREATE TABLE IF NOT EXISTS kitchen_board (id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(e=>{schema=null;throw e;});
@@ -29,8 +30,10 @@ module.exports=async(req,res)=>{
     await client.query(`INSERT INTO kitchen_board(id,data) SELECT 'family', jsonb_build_object('meals',COALESCE(jsonb_agg(jsonb_build_object('id',id,'name',details,'date',to_char(date,'YYYY-MM-DD'),'status','planned','ingredients','[]'::jsonb,'notes','','url','','favorite',false,'cookedAt','')),'[]'::jsonb),'stock','[]'::jsonb,'groceries','[]'::jsonb) FROM events WHERE lower(calendar)='meals' ON CONFLICT (id) DO NOTHING`);
     const {rows}=await client.query("SELECT version,data FROM kitchen_board WHERE id='family' FOR UPDATE");
     const current=rows[0];
+    const receipt=importReceipt(current.data,()=>crypto.randomUUID());
+    current.data=receipt.data;
     const calendar=await client.query("SELECT id,details AS name,to_char(date,'YYYY-MM-DD') AS date FROM events WHERE lower(calendar)='meals'");
-    let reconciled=false;
+    let reconciled=receipt.changed;
     for(const event of calendar.rows){
       const meal=current.data.meals.find(m=>m.id===event.id);
       if(!meal){current.data.meals.push({...event,status:'planned',ingredients:[],notes:'',url:'',favorite:false,cookedAt:''});reconciled=true;}

@@ -39,7 +39,7 @@
     }else if(action==='meal-idea'){
       const meal=find(s.meals);if(meal.status==='cooked')s.meals.push({...meal,id:id(),date:'',status:'idea',cookedAt:''});else Object.assign(meal,{date:'',status:'idea'});
     }else if(action==='meal-cook'){
-      const meal=find(s.meals);if(meal.status==='cooked')throw Error('This meal is already in your history.');
+      const meal=find(s.meals);if(meal.status==='cooked')throw Error('This meal is already marked as cooked.');
       if(data.useIngredients){
         for(const i of meal.ingredients){let left=i.quantity;const batches=s.stock.filter(x=>match(x,i)).sort((a,b)=>(a.bestBefore||'9999').localeCompare(b.bestBefore||'9999'));for(const batch of batches){const used=Math.min(left,batch.quantity);batch.quantity=rounded(batch.quantity-used);left=rounded(left-used);}}
       }
@@ -50,7 +50,7 @@
       const row={...food(data),place:data.place,bestBefore:date(data.bestBefore),notes:clean(data.notes,500),id:data.id||id()};
       if(data.id)Object.assign(find(s.stock),row);else s.stock.push(row);
     }else if(action==='stock-use'){
-      const item=find(s.stock);const amount=quantity(data.quantity);if(amount>item.quantity)throw Error('That is more than you have recorded.');item.quantity=rounded(item.quantity-amount);
+      const item=find(s.stock);const amount=quantity(data.quantity);if(amount>item.quantity)throw Error('That’s more than the amount in your pantry.');item.quantity=rounded(item.quantity-amount);
     }else if(action==='stock-delete'){find(s.stock);s.stock=s.stock.filter(x=>x.id!==data.id);
     }else if(action==='grocery-save'){
       const row={...food(data),id:data.id||id(),place:places.includes(data.place)?data.place:'Pantry',checked:Boolean(data.checked),notes:clean(data.notes,500)};
@@ -63,7 +63,7 @@
       const missing=shortages(s,s.meals.filter(m=>m.status==='planned'&&m.date>=from&&m.date<=to));
       for(const row of missing){const listed=s.groceries.filter(g=>match(g,row)).reduce((n,g)=>n+g.quantity,0);const additional=rounded(Math.max(0,row.quantity-listed));if(additional){const existing=s.groceries.find(g=>match(g,row)&&!g.checked);if(existing)existing.quantity=rounded(existing.quantity+additional);else s.groceries.push({...row,quantity:additional,id:id(),place:'Pantry',checked:false,notes:'For planned meals'});}}
     }else if(action==='groceries-put-away'){
-      const purchased=s.groceries.filter(x=>x.checked);if(!purchased.length)throw Error('Check off the groceries that have arrived first.');
+      const purchased=s.groceries.filter(x=>x.checked);if(!purchased.length)throw Error('Check off the groceries you received first.');
       for(const g of purchased){const existing=s.stock.find(x=>match(x,g)&&x.place===g.place&&!x.bestBefore);if(existing)existing.quantity=rounded(existing.quantity+g.quantity);else s.stock.push({...food(g),id:id(),place:g.place,bestBefore:'',notes:''});}
       s.groceries=s.groceries.filter(x=>!x.checked);
     }else throw Error('Unknown kitchen action.');

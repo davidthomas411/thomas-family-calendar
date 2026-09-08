@@ -7,7 +7,7 @@ const core=require('../kitchen-core');
 function setup(calendar=[]){
   const queries=[];const current={version:3,data:{meals:[],stock:[],groceries:[]}};
   const client={query:async(sql,params)=>{queries.push({sql,params});return{rows:sql.startsWith('SELECT version')?[current]:sql.startsWith('SELECT id,details')?calendar:[]};},release(){}};
-  const context={module:{exports:{}},require:name=>name==='crypto'?require('node:crypto'):name==='../lib/db'?{pool:{query:async()=>{},connect:async()=>client}}:name==='../lib/auth'?{verifyToken}:name==='../kitchen-core'?core:{saveJsonCache:async()=>{}},process:{env:{AUTH_SECRET:'test-only'}},Buffer,console};
+  const context={module:{exports:{}},require:name=>name==='crypto'?require('node:crypto'):name==='../lib/db'?{pool:{query:async()=>{},connect:async()=>client}}:name==='../lib/auth'?{verifyToken}:name==='../kitchen-core'?core:name==='../lib/kitchen-receipt-import'?{importReceipt:data=>({data,changed:false})}:{saveJsonCache:async()=>{}},process:{env:{AUTH_SECRET:'test-only'}},Buffer,console};
   vm.runInNewContext(fs.readFileSync(require.resolve('../api/kitchen'),'utf8'),context);
   const token=createToken({user:'test',exp:Date.now()+10000},'test-only');
   const call=async(body,auth=true)=>{const res={setHeader(){},end(value){this.body=JSON.parse(value);}};await context.module.exports({method:'POST',headers:auth?{authorization:`Bearer ${token}`}:{},body},res);return res;};
