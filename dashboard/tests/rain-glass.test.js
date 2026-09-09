@@ -11,7 +11,7 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
   sky.getBoundingClientRect=()=>({left:0,top:0,width:1180,height:820});
   document.querySelector('.primary-header').getBoundingClientRect=()=>({left:20,top:20,right:790,bottom:180});
   document.querySelector('.primary-widgets').getBoundingClientRect=()=>({left:320,top:30,right:780,bottom:170});
-  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[],uniformValues={};let seq=0,paints=0;
+  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[],uniformValues={},contextAttributes=[];let seq=0,paints=0;
   const gl=new Proxy({}, {get:(_,name)=>{
     if(String(name).startsWith('create'))return()=>{const r={name};resources.add(r);return r;};
     if(String(name).startsWith('delete'))return resource=>resources.delete(resource);
@@ -29,7 +29,7 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
     const element=create(name);
     if(name==='canvas'){
       const ctx={canvas:element,fillStyle:'',fillRect(){paints++;},clearRect(){},drawImage(){},setTransform(){},putImageData(){},getImageData(){return{data:new Uint8Array(4)};},createLinearGradient(){return{addColorStop(){}};},createRadialGradient(){return{addColorStop(){}};}};
-      element.getContext=kind=>['webgl2','webgl'].includes(kind)?(webgl?gl:null):ctx;
+      element.getContext=(kind,attributes)=>{if(['webgl2','webgl'].includes(kind)){contextAttributes.push(attributes);return webgl?gl:null;}return ctx;};
     }
     return element;
   };
@@ -43,7 +43,7 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
   };
   const run=()=>vm.runInNewContext(code,context);
   run();
-  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,uniformValues,paints:()=>paints};
+  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,uniformValues,contextAttributes,paints:()=>paints};
 }
 test('touch paints a persistent mask; buttons remain excluded and DPR is capped',async()=>{
   const env=setup();env.window.RainGlass.setMode('preview');
@@ -75,7 +75,9 @@ test('unsupported WebGL falls back to animated rain',()=>{
 test('Safari uses the full refractive shader, with wiping at the bottom of the app',async()=>{
   const env=setup({safari:true});env.window.RainGlass.setMode('preview');
   assert.equal(env.document.getElementById('rain-glass').dataset.renderer,'webgl');assert.ok(env.resources.size>0);
+  assert.equal(env.contextAttributes[0].premultipliedAlpha,true);
   assert.ok(env.sources.some(s=>s.includes('texture2D(uBackground,uv)')&&s.includes('GL_OES_standard_derivatives')));
+  assert.ok(env.sources.some(s=>s.includes('vec4(glass * alpha,alpha)')));
   for(const [id,fn]of [...env.timers]){env.timers.delete(id);await fn();}
   assert.equal(env.document.getElementById('rain-glass').dataset.snapshot,'ready');
   const [frameId,frameFn]=[...env.raf.entries()][0];env.raf.delete(frameId);frameFn(1000);assert.equal(env.uniformValues.uFogStrength,.035);

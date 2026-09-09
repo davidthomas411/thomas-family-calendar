@@ -39,7 +39,10 @@
     background=erased=buffer=program=null;
   }
   function initGL(type=safari?'webgl':'webgl2') {
-    const attributes={alpha:true,antialias:false,premultipliedAlpha:false,depth:false,stencil:false,preserveDrawingBuffer:false};
+    // Safari can composite a straight-alpha WebGL canvas as premultiplied,
+    // promoting pale RGB values into a full-screen white veil. Keep the
+    // drawing buffer and shader explicitly premultiplied on every browser.
+    const attributes={alpha:true,antialias:false,premultipliedAlpha:true,depth:false,stencil:false,preserveDrawingBuffer:false};
     gl=canvas.getContext(type,attributes);
     if(!gl&&type==='webgl2'){type='webgl';gl=canvas.getContext(type,attributes);}
     if (!gl || !window.RainGlassShaders) return false;

@@ -77,7 +77,7 @@
     float shadow = max(0.,dot(normal,normalize(vec2(.6,-.8))));
     glass += vec3(specular*.20-shadow*.10) * (1.-wipe);
     float alpha = max(fog*uFogStrength, max(height*.82,running.y*.30)) * region * uStrength;
-    color = vec4(glass,alpha);
+    color = vec4(glass * alpha,alpha);
   }`;
   // GLSL ES 1.00 renders the same glass on WebGL 1, including Safari.
   const vertexWebGL1=vertex.replace('#version 300 es','').replace('in vec2 aPosition','attribute vec2 aPosition').replace('out vec2 vUv','varying vec2 vUv');
