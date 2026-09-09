@@ -23,7 +23,9 @@
   const safari=typeof navigator!=='undefined' && /Apple/.test(navigator.vendor || '');
   let width=1,height=1,scale=1,maskScale=1,region=[0,0,1,1],controls=[0,0,0,0],snapshot=null,signature='';
   let strength=0, lastPointer=null, dirtyMask=true, resizeObserver, intersectionObserver;
-  try { mode=localStorage.getItem('rain-glass-mode')==='off'?'off':'auto'; } catch {}
+  // The retired UI offered Off and Preview. Always return existing devices to
+  // weather-driven behavior now that the family dashboard owns this setting.
+  try { localStorage.setItem('rain-glass-mode','auto'); } catch {}
   const active = () => !destroyed && !lost && visible && !document.hidden
     && (mode==='preview'||(mode==='auto'&&wet));
   function on(target,type,listener,options) {

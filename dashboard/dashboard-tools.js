@@ -1,7 +1,4 @@
 (() => {
-  const mode = document.getElementById('rain-mode');
-  try { if (mode) mode.value = localStorage.getItem('rain-glass-mode') || 'auto'; } catch {}
-  mode?.addEventListener('change', () => window.RainGlass?.setMode(mode.value));
   const now = new Date();
   const schoolYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   const yearLabel = document.getElementById('school-year-label');

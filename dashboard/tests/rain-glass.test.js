@@ -4,14 +4,14 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const {parseHTML}=require('linkedom');
 const code=fs.readFileSync(require.resolve('../rain-glass.js'),'utf8');
-function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
+function setup({reduced=false,webgl=true,safari=false,derivatives=true,storedMode=null}={}) {
   const {window,document}=parseHTML('<html><body><div id="sky"><div id="dashboard-view"><div class="primary-header"><div class="primary-widgets"></div></div><button id="button">Calendar</button></div></div></body></html>');
   const sky=document.getElementById('sky');
   Object.defineProperties(sky,{clientWidth:{value:1180,configurable:true},clientHeight:{value:820,configurable:true}});
   sky.getBoundingClientRect=()=>({left:0,top:0,width:1180,height:820});
   document.querySelector('.primary-header').getBoundingClientRect=()=>({left:20,top:20,right:790,bottom:180});
   document.querySelector('.primary-widgets').getBoundingClientRect=()=>({left:320,top:30,right:780,bottom:170});
-  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[],uniformValues={},contextAttributes=[];let seq=0,paints=0;
+  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[],uniformValues={},contextAttributes=[],savedModes=[];let seq=0,paints=0;
   const gl=new Proxy({}, {get:(_,name)=>{
     if(String(name).startsWith('create'))return()=>{const r={name};resources.add(r);return r;};
     if(String(name).startsWith('delete'))return resource=>resources.delete(resource);
@@ -36,15 +36,21 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
   const media=new window.EventTarget();media.matches=reduced;
   vm.runInNewContext(fs.readFileSync(require.resolve('../rain-glass-shaders.js'),'utf8'),{window});
   window.html2canvas=async()=>document.createElement('canvas');
-  const context={window,document,navigator:{vendor:safari?'Apple Computer, Inc.':''},location:{hash:''},localStorage:{getItem:()=>null,setItem(){}},devicePixelRatio:3,matchMedia:()=>media,console,Uint8Array,Float32Array,Math,
+  const context={window,document,navigator:{vendor:safari?'Apple Computer, Inc.':''},location:{hash:''},localStorage:{getItem:()=>storedMode,setItem:(_key,value)=>savedModes.push(value)},devicePixelRatio:3,matchMedia:()=>media,console,Uint8Array,Float32Array,Math,
     requestAnimationFrame:fn=>{const id=++seq;raf.set(id,fn);return id;},cancelAnimationFrame:id=>raf.delete(id),
     setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
     setInterval:fn=>{const id=++seq;intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),
   };
   const run=()=>vm.runInNewContext(code,context);
   run();
-  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,uniformValues,contextAttributes,paints:()=>paints};
+  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,uniformValues,contextAttributes,savedModes,paints:()=>paints};
 }
+test('rain control is retired and old preferences return to automatic weather',()=>{
+  const html=fs.readFileSync(require.resolve('../index.html'),'utf8');assert.ok(!html.includes('rain-mode'));
+  const env=setup({storedMode:'off'});assert.deepEqual(env.savedModes,['auto']);
+  env.window.RainGlass.setWeather(500);assert.equal(env.document.getElementById('rain-glass').hidden,false);
+  env.window.RainGlass.destroy();
+});
 test('touch paints a persistent mask; buttons remain excluded and DPR is capped',async()=>{
   const env=setup();env.window.RainGlass.setMode('preview');
   const before=env.paints();
