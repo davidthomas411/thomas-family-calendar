@@ -111,8 +111,9 @@
     $('kitchen-add').textContent=tab==='meals'?'+ Add meal':tab==='stock'?'+ Add food':'+ Add item';
     let html='';
     if(tab==='meals'){
-      const planned=s.meals.filter(m=>m.status==='planned'&&m.date>=week&&m.date<=end);
-      html=`<div class="kitchen-week">${Array.from({length:7},(_,i)=>{const day=shift(week,i);return `<div class="kitchen-day ${day===today()?'is-today':''}" data-drop-date="${day}"><strong>${pretty(day)}</strong><span>${escape(planned.filter(m=>m.date===day).map(m=>m.name).join(' + ')||'—')}</span></div>`;}).join('')}</div><div class="kitchen-board">`;
+      const scheduled=s.meals.filter(m=>m.date>=week&&m.date<=end);
+      const planned=scheduled.filter(m=>m.status==='planned');
+      html=`<div class="kitchen-week">${Array.from({length:7},(_,i)=>{const day=shift(week,i);return `<div class="kitchen-day ${day===today()?'is-today':''}" data-drop-date="${day}"><strong>${pretty(day)}</strong><span>${escape(scheduled.filter(m=>m.date===day).map(m=>`${m.status==='cooked'?'✓ ':''}${m.name}`).join(' + ')||'—')}</span></div>`;}).join('')}</div><div class="kitchen-board">`;
       const lanes=[['Ideas',s.meals.filter(m=>m.status==='idea'),'Save dinners you want to try.','idea'],['This week',planned.sort((a,b)=>a.date.localeCompare(b.date)),'Plan a meal, or drag an idea onto a day.','planned'],['Meals we’ve had',s.meals.filter(m=>m.status==='cooked').sort((a,b)=>b.cookedAt.localeCompare(a.cookedAt)),'Meals you mark as cooked will appear here.','cooked']];
       for(const [title,items,empty,lane]of lanes){const matches=items.filter(filter);html+=`<section class="kitchen-lane" data-lane="${lane}"><h2>${title}<span>${items.length}</span></h2>${matches.map(mealCard).join('')||`<p class="kitchen-empty">${search?'No matches.':empty}</p>`}</section>`;}
       html+='</div>';

@@ -19,6 +19,7 @@ test('received groceries move to the selected storage and can be consumed only o
   assert.throws(()=>change(s,'groceries-put-away',{}));
   s=change(s,'meal-save',{name:'Porridge',date:'2026-09-08',ingredients:[{name:'milk',quantity:0.5,unit:'l'}]});
   const id=s.meals[0].id;s=change(s,'meal-cook',{id,useIngredients:true});assert.equal(s.stock[0].quantity,1.5);
+  assert.equal(s.meals[0].date,'2026-09-08');
   assert.throws(()=>change(s,'meal-cook',{id,useIngredients:true}));
   s=change(s,'meal-plan',{id,date:'2026-09-15'});assert.equal(s.meals.length,2);assert.equal(s.meals[0].status,'cooked');assert.equal(s.meals[1].status,'planned');
 });

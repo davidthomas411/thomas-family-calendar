@@ -37,3 +37,14 @@ test('typing one meal and pressing Enter schedules it for today',async()=>{
   const expected=new Date(),date=`${expected.getFullYear()}-${String(expected.getMonth()+1).padStart(2,'0')}-${String(expected.getDate()).padStart(2,'0')}`;
   assert.equal(submitted.action,'meal-save');assert.equal(submitted.data.name,'Taco night');assert.equal(submitted.data.date,date);assert.equal(input.value,'');
 });
+test('cooked meals stay visible on their scheduled day',async()=>{
+  const {window,document}=parseHTML(fs.readFileSync(require.resolve('../index.html'),'utf8'));
+  const d=new Date(),today=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const state={version:1,data:{meals:[{id:'m1',name:'Taco night',date:today,status:'cooked',ingredients:[],notes:'',url:'',favorite:false,cookedAt:new Date().toISOString()}],stock:[],groceries:[]}};
+  window.KitchenCore=core;
+  const ctx={window,document,console,localStorage:{getItem:()=>null},location:{hash:'#meals'},fetch:async()=>({ok:true,json:async()=>state}),setInterval:()=>1,Event:window.Event,FormData};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../kitchen.js'),'utf8'),ctx);await settle();
+  const todayCell=document.querySelector('.kitchen-day.is-today');
+  assert.match(todayCell.textContent,/✓ Taco night/);
+  assert.equal(document.getElementById('meal-preview-title').textContent,'Taco night');
+});
