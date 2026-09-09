@@ -3,9 +3,11 @@
 The family-facing navigation is Meals, Pantry, and Shopping list. Pantry is a
 single compact list grouped by food type, such as meat, cheese, dairy, produce
 and staples. Short names combine variants like yoghurt in one expandable row.
-Package quantities, locations, dates, notes and editing controls appear only
-when expanded. Labels and categories can be changed in the item editor without
-renaming recipe ingredients or losing individual packages. Copy uses everyday wording: Back to
+One click crosses an item out and keeps it in its category; clicking again
+restores its exact quantities. The adjacent plus reveals package quantities,
+locations, dates, notes and editing controls. Labels and categories can be
+changed without renaming recipe ingredients or losing individual packages.
+Copy uses everyday wording: Back to
 ideas, Update what’s left in the pantry, and Put groceries away.
 
 The owner supplied a GIANT receipt for September 7, 2026 and requested its import.
@@ -15,23 +17,25 @@ family member removes or uses an item. It preserves existing contents, excludes
 undelivered bagels/gyro bread, and keeps measured weights and package details.
 No best-before dates, address, account or payment details are imported.
 
-The home screen's dinner button opens `#meals`. The kitchen has a meal board,
+The home screen's dinner button opens `#meals`. A single dinner field at the top
+adds a meal to today with Enter or one button. The kitchen also has a meal board,
 pantry/fridge/freezer inventory, and a shared grocery list. Family sign-in is
 required for changes. It starts with existing scheduled meal events and no
 invented pantry contents. Past plans are not automatically marked as cooked.
 
 ## Everyday workflow
 
-1. Add food on hand, including quantities, storage locations and optional dates.
-2. Add a meal with ingredients, a recipe link and family notes. Schedule it with
+1. Add pantry items, including quantities, storage locations and optional dates.
+2. Type dinner in the quick field to add it to today. Add a meal with ingredients,
+   a recipe link and family notes when more detail is useful. Schedule it with
    Plan or drag its card onto a day. Planned dinners appear in the calendar.
-3. On Grocery list, add missing ingredients for the selected week. Repeating
+3. On Shopping list, add missing ingredients for the selected week. Repeating
    this action adds only additional shortages. Manual groceries remain intact.
 4. Copy the list or open each item's GIANT product search. The family chooses
    products and adds them to the retailer's cart. No order is placed by this app.
 5. When groceries arrive, check them off and put them away. Edit a grocery's
-   destination before putting it away; add package dates in Food on hand.
-6. Mark a meal Cooked. Optionally deduct recorded ingredient quantities, using
+   destination before putting it away; add package dates in Pantry.
+6. Mark a meal Cooked. Optionally update pantry quantities, using
    the earliest dated batch first. Make again creates a new plan and retains
    history. Family feedback and favorite markers stay with the meal.
 

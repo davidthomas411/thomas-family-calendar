@@ -18,6 +18,7 @@
   uniform float uTime;
   uniform float uMotion;
   uniform float uStrength;
+  uniform float uFogStrength;
   vec3 N13(float p) {
     vec3 p3 = fract(vec3(p) * vec3(.1031,.11369,.13787));
     p3 += dot(p3, p3.yzx + 19.19);
@@ -70,12 +71,12 @@
       + texture(uBackground,uv - vec2(0,blur.y)).rgb;
     soft = soft * .20 + clear * .20;
     float fog = (1.-wipe) * (1.-running.y*.6) * (1.-height*.85);
-    vec3 glass = mix(clear,soft,fog*.8);
-    glass = mix(glass,vec3(.78,.84,.86),fog*.10);
+    vec3 glass = mix(clear,soft,fog*.34);
+    glass = mix(glass,vec3(.64,.73,.78),fog*uFogStrength*.22);
     float specular = max(0.,dot(normal,normalize(vec2(-.6,.8))));
     float shadow = max(0.,dot(normal,normalize(vec2(.6,-.8))));
     glass += vec3(specular*.20-shadow*.10) * (1.-wipe);
-    float alpha = max(fog*.12, max(height*.85,running.y*.22)) * region * uStrength;
+    float alpha = max(fog*uFogStrength, max(height*.82,running.y*.30)) * region * uStrength;
     color = vec4(glass,alpha);
   }`;
   // GLSL ES 1.00 renders the same glass on WebGL 1, including Safari.

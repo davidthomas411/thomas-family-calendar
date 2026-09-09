@@ -91,6 +91,15 @@
       if(data.id)Object.assign(find(s.stock),row);else s.stock.push(row);
     }else if(action==='stock-use'){
       const item=find(s.stock);const amount=quantity(data.quantity);if(amount>item.quantity)throw Error('That’s more than the amount in your pantry.');item.quantity=rounded(item.quantity-amount);
+    }else if(action==='stock-toggle-group'){
+      const ids=Array.isArray(data.ids)?[...new Set(data.ids.filter(id=>typeof id==='string'))]:[];
+      if(!ids.length||ids.length>100)throw Error('Choose a pantry item.');
+      const selected=ids.map(itemId=>{const item=s.stock.find(x=>x.id===itemId);if(!item)throw Error('That item is no longer in the pantry. Refresh and try again.');return item;});
+      if(data.used){
+        for(const item of selected){if(item.quantity>0){item.previousQuantity=item.quantity;item.quantity=0;}}
+      }else{
+        for(const item of selected){if(item.quantity===0)item.quantity=quantity(item.previousQuantity||1);delete item.previousQuantity;}
+      }
     }else if(action==='stock-delete'){find(s.stock);s.stock=s.stock.filter(x=>x.id!==data.id);
     }else if(action==='grocery-save'){
       const row={...food(data),id:data.id||id(),place:places.includes(data.place)?data.place:'Pantry',checked:Boolean(data.checked),notes:clean(data.notes,500)};

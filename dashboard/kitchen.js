@@ -21,13 +21,13 @@
   }
   async function change(action,data,message=''){
     if(busy||!board)return false;const auth=session();if(!auth){if(dialog.open)dialog.close();signIn();return false;}
-    busy=true;++loadSequence;document.querySelectorAll('.kitchen-dialog button,#kitchen-add').forEach(b=>b.disabled=true);
+    busy=true;++loadSequence;document.querySelectorAll('.kitchen-dialog button,#kitchen-add,#kitchen-quick-meal button').forEach(b=>b.disabled=true);
     try{
       const response=await fetch('/api/kitchen',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify({version:board.version,action,data})});
       const result=await response.json();if(!response.ok){if(response.status===409){busy=false;await refresh();}throw Error(result.error||'Could not save your change.');}
       board=result;render();status(message);channel?.postMessage({type:'events-updated'});window.dispatchEvent(new Event('kitchen-updated'));return true;
     }catch(e){status(e.message,true);const error=dialog.querySelector('[data-form-error]');if(error)error.textContent=e.message;return false;}
-    finally{busy=false;document.querySelectorAll('.kitchen-dialog button,#kitchen-add').forEach(b=>b.disabled=false);}
+    finally{busy=false;document.querySelectorAll('.kitchen-dialog button,#kitchen-add,#kitchen-quick-meal button').forEach(b=>b.disabled=false);}
   }
   function openForm(title,body,onSubmit){
     if(!session()){signIn();return;}
@@ -81,7 +81,7 @@
     return `<div class="pantry-groups">${core.categories.map(category=>{
       const list=rows.filter(g=>g.category===category).sort((a,b)=>a.label.localeCompare(b.label));
       if(!list.length)return '';
-      return `<section class="pantry-group"><h2>${escape(category)}</h2>${list.map(group=>`<details class="pantry-item" data-pantry-key="${escape(group.key)}"><summary><span>${escape(group.label)}</span><span class="pantry-expand" aria-hidden="true">+</span></summary><div class="pantry-item-details">${group.items.map(item=>`<div class="pantry-package">${item.name!==group.label?`<strong>${escape(item.name)}</strong>`:''}<p>${amount(item)} · ${item.place}${item.quantity===0?' · All gone':''}</p>${item.bestBefore?`<p>Best before ${pretty(item.bestBefore)}</p>`:''}${item.notes?`<p class="kitchen-note">${escape(item.notes)}</p>`:''}<div class="kitchen-card-actions">${button('stock-edit',item.id,'Edit')}${button('stock-use',item.id,'Use some')}${button('stock-buy',item.id,'Buy more')}${button('stock-delete',item.id,'Remove')}</div></div>`).join('')}</div></details>`).join('')}</section>`;
+      return `<section class="pantry-group"><h2>${escape(category)}</h2>${list.map(group=>{const used=group.items.every(item=>item.quantity===0),ids=group.items.map(item=>item.id);return `<div class="pantry-item ${used?'is-used':''}" data-pantry-key="${escape(group.key)}"><div class="pantry-row"><label><input type="checkbox" data-pantry-toggle="${escape(JSON.stringify(ids))}" ${used?'checked':''}><span>${escape(group.label)}</span></label><button type="button" class="pantry-expand" data-pantry-details aria-label="Details for ${escape(group.label)}" aria-expanded="false">+</button></div><div class="pantry-item-details" hidden>${group.items.map(item=>`<div class="pantry-package">${item.name!==group.label?`<strong>${escape(item.name)}</strong>`:''}<p>${amount(item)} · ${item.place}${item.quantity===0?' · Used up':''}</p>${item.bestBefore?`<p>Best before ${pretty(item.bestBefore)}</p>`:''}${item.notes?`<p class="kitchen-note">${escape(item.notes)}</p>`:''}<div class="kitchen-card-actions">${button('stock-edit',item.id,'Edit')}${button('stock-use',item.id,'Use some')}${button('stock-buy',item.id,'Buy more')}${button('stock-delete',item.id,'Remove')}</div></div>`).join('')}</div></div>`;}).join('')}</section>`;
     }).join('')}</div>`;
   }
   function mealCard(m){
@@ -96,10 +96,11 @@
   }
   function render(){
     if(!board)return;const s=board.data;const end=shift(week,6);const filter=x=>core.key([x.name,x.notes,...(x.ingredients||[]).map(i=>i.name)].join(' ')).includes(core.key(search));
-    const openPantry=new Set([...$('meals-list').querySelectorAll('details[open][data-pantry-key]')].map(el=>el.dataset.pantryKey));
+    const openPantry=new Set([...$('meals-list').querySelectorAll('[data-pantry-key] [data-pantry-details][aria-expanded="true"]')].map(el=>el.closest('[data-pantry-key]').dataset.pantryKey));
     $('meals-view').classList.toggle('pantry-active',tab==='stock');
     $('kitchen-overview').hidden=tab==='stock';
     document.querySelector('.meals-week').hidden=tab!=='meals';
+    $('kitchen-quick-meal').hidden=tab!=='meals';
     $('kitchen-search').placeholder=tab==='stock'?'Find something in the pantry':'Find a meal or ingredient';
     $('meals-week-picker').value=week;$('meals-week-label').textContent=`${pretty(week)} – ${pretty(end)}`;
     $('meal-preview-title').textContent=s.meals.filter(m=>m.date===today()).map(m=>m.name).join(' + ')||'No dinner planned';
@@ -119,16 +120,14 @@
       if(other.length)html+=`<details class="kitchen-other"><summary>Meals on other dates (${other.length})</summary><div class="kitchen-board">${other.map(mealCard).join('')}</div></details>`;
       html+='<p class="kitchen-hint">Drag a meal onto a day, or tap Plan.</p>';
     }else if(tab==='stock'){
-      html=pantryList(s.stock.filter(i=>i.quantity>0),filter);
-      const used=s.stock.filter(i=>i.quantity===0);
-      if(used.length)html+=`<details class="pantry-used"><summary>Used up</summary>${pantryList(used,filter)}</details>`;
+      html=pantryList(s.stock,filter);
     }else{
       html=`<div class="kitchen-shopping-actions"><button class="action-button" data-action="shop-meals">Add what we need this week</button><button data-action="copy-list">Copy list</button><a class="action-link" href="https://giantfoodstores.com/" target="_blank" rel="noopener noreferrer">Shop at GIANT ↗</a><button data-action="put-away">Put groceries away</button></div><p class="kitchen-hint">Tap Find at GIANT to choose a product and add it to your cart there. When the order arrives, check off what you received and tap Put groceries away.</p><div class="kitchen-groceries">`;
       for(const g of s.groceries.filter(filter).sort((a,b)=>Number(a.checked)-Number(b.checked)||a.name.localeCompare(b.name))){html+=`<article class="kitchen-grocery ${g.checked?'is-checked':''}"><label><input type="checkbox" data-grocery-check="${g.id}" ${g.checked?'checked':''}><span><strong>${escape(g.name)}</strong><small>${amount(g)} · ${g.place}${g.notes?' · '+escape(g.notes):''}</small></span></label><div class="kitchen-card-actions"><a href="https://giantfoodstores.com/product-search/${encodeURIComponent(g.name)}" target="_blank" rel="noopener noreferrer">Find at GIANT ↗</a>${button('grocery-edit',g.id,'Edit')}${button('grocery-delete',g.id,'Remove')}</div></article>`;}
       html+=(s.groceries.filter(filter).length?'':'<p class="kitchen-empty">Add the usual groceries, or make a list from this week’s meals.</p>')+'</div>';
     }
     $('meals-list').innerHTML=html;
-    $('meals-list').querySelectorAll('[data-pantry-key]').forEach(el=>{if(openPantry.has(el.dataset.pantryKey))el.setAttribute('open','');});
+    $('meals-list').querySelectorAll('[data-pantry-key]').forEach(el=>{if(openPantry.has(el.dataset.pantryKey)){el.querySelector('[data-pantry-details]').setAttribute('aria-expanded','true');el.querySelector('.pantry-item-details').hidden=false;}});
   }
   document.addEventListener('click',async e=>{
     const t=e.target.closest('[data-kitchen-tab]');if(t){tab=t.dataset.kitchenTab;render();return;}
@@ -148,11 +147,26 @@
       try{await navigator.clipboard.writeText(text);status('Shopping list copied.');}catch{openForm('Copy your shopping list',`<textarea rows="12" readonly>${escape(text)}</textarea>`,async()=>true);dialog.querySelector('textarea')?.select();}
     }
   });
+  $('meals-list').addEventListener('click',e=>{
+    const details=e.target.closest('[data-pantry-details]');if(!details)return;
+    const item=details.closest('[data-pantry-key]'),panel=item.querySelector('.pantry-item-details'),open=details.getAttribute('aria-expanded')==='true';
+    details.setAttribute('aria-expanded',String(!open));panel.hidden=open;
+  });
+  $('meals-list').addEventListener('change',e=>{
+    if(!e.target.matches('[data-pantry-toggle]'))return;
+    let ids=[];try{ids=JSON.parse(e.target.dataset.pantryToggle);}catch{}
+    e.target.closest('.pantry-item')?.classList.toggle('is-used',e.target.checked);
+    change('stock-toggle-group',{ids,used:e.target.checked},e.target.checked?'Crossed off.':'Back in the pantry.').then(ok=>{if(!ok)render();});
+  });
   $('meals-list').addEventListener('change',e=>{const id=e.target.dataset.groceryCheck;if(id)change('grocery-check',{id,checked:e.target.checked}).then(ok=>{if(!ok)render();});});
   $('meals-list').addEventListener('dragstart',e=>{const card=e.target.closest('[data-meal-id]');if(card)e.dataTransfer.setData('text/plain',card.dataset.mealId);});
   $('meals-list').addEventListener('dragover',e=>{if(e.target.closest('[data-drop-date],[data-lane="idea"]'))e.preventDefault();});
   $('meals-list').addEventListener('drop',e=>{const target=e.target.closest('[data-drop-date],[data-lane="idea"]');if(!target)return;e.preventDefault();const id=e.dataTransfer.getData('text/plain');if(!board.data.meals.some(m=>m.id===id))return;if(target.dataset.dropDate)change('meal-plan',{id,date:target.dataset.dropDate});else change('meal-idea',{id});});
   $('kitchen-add').onclick=()=>{if(!board)return;if(tab==='meals')editMeal();else editFood(tab==='stock'?'stock':'grocery');};
+  $('kitchen-quick-meal').onsubmit=async e=>{
+    e.preventDefault();const input=$('kitchen-quick-meal-name'),name=input.value.trim();if(!name)return;
+    if(await change('meal-save',{name,date:today(),ingredients:[],notes:'',url:'',favorite:false},`${name} added to today.`)){input.value='';input.focus();}
+  };
   $('kitchen-search').oninput=e=>{search=e.target.value;render();};
   $('kitchen-refresh').onclick=()=>{status('');refresh();};
   $('kitchen-prev').onclick=()=>{week=shift(week,-7);render();};$('kitchen-next').onclick=()=>{week=shift(week,7);render();};$('kitchen-today').onclick=()=>{week=monday(new Date());render();};

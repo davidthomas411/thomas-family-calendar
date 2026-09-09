@@ -122,6 +122,10 @@
           <button data-kitchen-tab="stock" aria-pressed="false">Pantry</button>
           <button data-kitchen-tab="groceries" aria-pressed="false">Shopping list</button>
         </nav>
+        <form id="kitchen-quick-meal" class="kitchen-quick-meal">
+          <input id="kitchen-quick-meal-name" type="text" maxlength="200" autocomplete="off" placeholder="What’s for dinner?" aria-label="Dinner for today" required />
+          <button class="action-button" type="submit">Add to today</button>
+        </form>
         <div class="kitchen-toolbar">
           <input id="kitchen-search" type="search" placeholder="Find a meal or ingredient" aria-label="Search kitchen" />
           <button id="kitchen-add" class="action-button">Add meal</button>

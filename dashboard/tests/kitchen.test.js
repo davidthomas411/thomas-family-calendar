@@ -34,3 +34,9 @@ test('bad quantities, invalid dates and executable recipe links are rejected wit
   assert.throws(()=>change(s,'meal-save',{name:'Bad link',url:'javascript:alert(1)'}));
   assert.deepEqual(s,empty());
 });
+test('one pantry action crosses out a grouped item and restores its exact quantities',()=>{
+  let s=empty();s=change(s,'stock-save',{name:'Coconut yogurt',quantity:4,unit:'each',place:'Fridge'});s=change(s,'stock-save',{name:'Key lime yogurt',quantity:2,unit:'each',place:'Fridge'});
+  const ids=s.stock.map(i=>i.id);s=change(s,'stock-toggle-group',{ids,used:true});assert.deepEqual(s.stock.map(i=>i.quantity),[0,0]);assert.deepEqual(s.stock.map(i=>i.previousQuantity),[4,2]);
+  s=change(s,'stock-toggle-group',{ids,used:false});assert.deepEqual(s.stock.map(i=>i.quantity),[4,2]);assert.ok(s.stock.every(i=>!Object.hasOwn(i,'previousQuantity')));
+  assert.throws(()=>change(s,'stock-toggle-group',{ids:['missing'],used:true}));
+});

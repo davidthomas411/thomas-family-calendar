@@ -16,11 +16,24 @@ test('kitchen renders shared food and groceries, keeps tonight independent of se
   document.getElementById('kitchen-next').click();assert.equal(document.getElementById('meal-preview-title').textContent,'Soup <script>');
   document.querySelector('.kitchen-tabs [data-kitchen-tab="stock"]').click();assert.match(document.getElementById('meals-list').textContent,/Carrots/);
   assert.equal(document.querySelector('.pantry-group h2').textContent,'Vegetables');
-  assert.equal(document.querySelector('.pantry-item summary').textContent,'Carrots+');
-  assert.equal(document.querySelector('.pantry-item').hasAttribute('open'),false);
+  assert.equal(document.querySelector('.pantry-row label span').textContent,'Carrots');
+  assert.equal(document.querySelector('.pantry-item-details').hidden,true);
   assert.equal(document.querySelector('.meals-week').hidden,true);
   assert.equal(document.getElementById('kitchen-overview').hidden,true);
+  document.querySelector('[data-pantry-details]').click();assert.equal(document.querySelector('.pantry-item-details').hidden,false);
   document.querySelector('.kitchen-tabs [data-kitchen-tab="groceries"]').click();assert.match(document.getElementById('meals-list').textContent,/Milk & cream/);
   assert.equal(document.querySelector('.kitchen-grocery a').getAttribute('href'),'https://giantfoodstores.com/product-search/Milk%20%26%20cream');
   document.getElementById('kitchen-add').click();assert.equal(document.getElementById('login-modal').getAttribute('aria-hidden'),'false');
+});
+test('typing one meal and pressing Enter schedules it for today',async()=>{
+  const {window,document}=parseHTML(fs.readFileSync(require.resolve('../index.html'),'utf8'));
+  const state={version:4,data:{meals:[],stock:[],groceries:[]}};let submitted;
+  window.KitchenCore=core;
+  const fetch=async(_url,options)=>{if(options?.method==='POST'){submitted=JSON.parse(options.body);return{ok:true,json:async()=>({version:5,data:{...state.data,meals:[{id:'new',...submitted.data,status:'planned',cookedAt:''}]}})};}return{ok:true,json:async()=>state};};
+  const ctx={window,document,console,localStorage:{getItem:()=>JSON.stringify({token:'family-token',expires:Date.now()+60000})},location:{hash:'#meals'},fetch,setInterval:()=>1,Event:window.Event,FormData};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../kitchen.js'),'utf8'),ctx);await settle();
+  const input=document.getElementById('kitchen-quick-meal-name');input.value='Taco night';
+  document.getElementById('kitchen-quick-meal').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  const expected=new Date(),date=`${expected.getFullYear()}-${String(expected.getMonth()+1).padStart(2,'0')}-${String(expected.getDate()).padStart(2,'0')}`;
+  assert.equal(submitted.action,'meal-save');assert.equal(submitted.data.name,'Taco night');assert.equal(submitted.data.date,date);assert.equal(input.value,'');
 });

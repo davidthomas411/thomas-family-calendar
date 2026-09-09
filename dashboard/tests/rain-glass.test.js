@@ -11,13 +11,14 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
   sky.getBoundingClientRect=()=>({left:0,top:0,width:1180,height:820});
   document.querySelector('.primary-header').getBoundingClientRect=()=>({left:20,top:20,right:790,bottom:180});
   document.querySelector('.primary-widgets').getBoundingClientRect=()=>({left:320,top:30,right:780,bottom:170});
-  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[];let seq=0,paints=0;
+  const resources=new Set(),raf=new Map(),timers=new Map(),intervals=new Map(),sources=[],uniformValues={};let seq=0,paints=0;
   const gl=new Proxy({}, {get:(_,name)=>{
     if(String(name).startsWith('create'))return()=>{const r={name};resources.add(r);return r;};
     if(String(name).startsWith('delete'))return resource=>resources.delete(resource);
     if(name==='getShaderParameter'||name==='getProgramParameter')return()=>true;
     if(name==='getAttribLocation')return()=>0;
     if(name==='getUniformLocation')return(_,n)=>n;
+    if(name==='uniform1f')return(location,value)=>{uniformValues[location]=value;};
     if(name==='getExtension')return()=>derivatives?{}:null;
     if(name==='shaderSource')return(_,source)=>sources.push(source);
     if(/^[A-Z_0-9]+$/.test(String(name)))return 1;
@@ -42,7 +43,7 @@ function setup({reduced=false,webgl=true,safari=false,derivatives=true}={}) {
   };
   const run=()=>vm.runInNewContext(code,context);
   run();
-  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,paints:()=>paints};
+  return {window,document,sky,context,run,media,resources,raf,timers,intervals,sources,uniformValues,paints:()=>paints};
 }
 test('touch paints a persistent mask; buttons remain excluded and DPR is capped',async()=>{
   const env=setup();env.window.RainGlass.setMode('preview');
@@ -77,6 +78,7 @@ test('Safari uses the full refractive shader, with wiping at the bottom of the a
   assert.ok(env.sources.some(s=>s.includes('texture2D(uBackground,uv)')&&s.includes('GL_OES_standard_derivatives')));
   for(const [id,fn]of [...env.timers]){env.timers.delete(id);await fn();}
   assert.equal(env.document.getElementById('rain-glass').dataset.snapshot,'ready');
+  const [frameId,frameFn]=[...env.raf.entries()][0];env.raf.delete(frameId);frameFn(1000);assert.equal(env.uniformValues.uFogStrength,.035);
   const event=new env.window.Event('pointermove',{bubbles:true});Object.assign(event,{clientX:1000,clientY:780,pointerId:1,pointerType:'touch'});env.sky.dispatchEvent(event);
   assert.equal(env.document.getElementById('rain-glass').dataset.wipes,'1');
   env.media.matches=true;env.media.dispatchEvent(new env.window.Event('change'));assert.equal(env.raf.size,0);
@@ -86,7 +88,7 @@ test('missing derivatives extension uses portable normals while preserving refra
   const env=setup({safari:true,derivatives:false});
   assert.equal(env.document.getElementById('rain-glass').dataset.renderer,'webgl');
   const fragment=env.sources.find(s=>s.includes('texture2D(uBackground,uv)'));
-  assert.ok(fragment);assert.ok(!fragment.includes('dFdx('));assert.ok(fragment.includes('right-left'));
+  assert.ok(fragment);assert.ok(!fragment.includes('dFdx('));assert.ok(fragment.includes('right-left'));assert.ok(fragment.includes('uFogStrength'));
   env.window.RainGlass.destroy();
 });
 test('a failed DOM capture retains the shader and a restored context resumes it',async()=>{

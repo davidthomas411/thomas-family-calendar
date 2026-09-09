@@ -10,6 +10,10 @@ shader, rather than being forced onto Canvas 2D. It uses standard derivatives
 when supported, or finite differences otherwise. Other browsers try WebGL 2
 and then the compatible WebGL 1 path. Both sample the dashboard texture.
 
+The full-screen fog is deliberately faint, especially on Safari, so it does not
+wash out text and panels. Refraction and contrast sit in the drops and rivulets;
+the shader uses a neutral blue-gray tint instead of a white veil.
+
 WebGL cannot directly sample HTML. A locally bundled, MIT-licensed html2canvas
 captures the existing dashboard to an in-memory texture only when needed:
 activation, resize, weather/time changes. No snapshots are uploaded or saved.

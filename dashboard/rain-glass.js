@@ -70,7 +70,7 @@
         return tex;
       };
       background=texture(0); erased=texture(1);
-      uniforms=Object.fromEntries(['uBackground','uErasedMask','uSize','uRegion','uControls','uTime','uMotion','uStrength'].map(name=>[name,gl.getUniformLocation(program,name)]));
+      uniforms=Object.fromEntries(['uBackground','uErasedMask','uSize','uRegion','uControls','uTime','uMotion','uStrength','uFogStrength'].map(name=>[name,gl.getUniformLocation(program,name)]));
       gl.uniform1i(uniforms.uBackground,0); gl.uniform1i(uniforms.uErasedMask,1);
       canvas.dataset.renderer=type; return true;
     } catch(error) {
@@ -129,7 +129,7 @@
     gl.uniform2f(uniforms.uSize,width,height); gl.uniform4fv(uniforms.uRegion,region);
     gl.uniform4fv(uniforms.uControls,controls);
     gl.uniform1f(uniforms.uTime,elapsed); gl.uniform1f(uniforms.uMotion,reduced.matches?0:1);
-    gl.uniform1f(uniforms.uStrength,strength); gl.drawArrays(gl.TRIANGLES,0,6);
+    gl.uniform1f(uniforms.uStrength,strength);gl.uniform1f(uniforms.uFogStrength,safari?.035:.075);gl.drawArrays(gl.TRIANGLES,0,6);
   }
   function tick(now) {
     frame=0;
