@@ -15,8 +15,34 @@ const CALENDAR_SOURCES = {
       "https://ical-cdn.teamsnap.com/team_schedule/filter/games/8008b9a5-560a-4245-859f-465d1136265b.ics",
       "https://ical-cdn.teamsnap.com/team_schedule/filter/games/ae84875e-bcdc-484b-b4b6-ab7256904679.ics",
     ],
+    staticEvents: [
+      ["2026-09-19", "Powerskating"],
+      ["2026-10-10", "Powerskating"],
+      ["2026-10-24", "Stickhandling"],
+      ["2026-11-07", "Stickhandling"],
+      ["2026-11-21", "Passing"],
+      ["2026-12-12", "Passing"],
+      ["2026-12-19", "Shooting"],
+      ["2027-01-09", "Shooting"],
+      ["2027-01-23", "Game Situations & Positioning"],
+      ["2027-02-27", "Full-ice Scrimmage"],
+    ].map(([startDate, focus], index) => ({
+      uid: `lady-dragons-developmental-2026-${index + 1}`,
+      summary: `K · Lady Dragons — ${focus}`,
+      location: "",
+      startDate,
+      startTime: "08:00",
+      allDay: false,
+      isUtc: false,
+      endDate: startDate,
+      endTime: "09:00",
+      endIsUtc: false,
+      endExclusive: false,
+      description: "2026–27 Lady Dragons Developmental Girls Program",
+      source: "hockey",
+    })),
     ttlMs: 24 * 60 * 60 * 1000,
-    cacheVersion: 3,
+    cacheVersion: 4,
   },
   qgenda: {
     url: "https://app.qgenda.com/ical?key=8510995d-2d15-4ba7-873a-9c0ad56c1c38",
@@ -217,9 +243,10 @@ const fetchSourceEvents = async (config, source) => {
   const failed = results.find((result) => result.status === "rejected");
   // Keep a complete previous snapshot instead of silently caching a partial season.
   if (failed) throw failed.reason;
-  const events = results
+  const events = [...(config.staticEvents || [])]
+    .concat(results
     .filter((result) => result.status === "fulfilled")
-    .flatMap((result) => result.value)
+    .flatMap((result) => result.value))
     .sort(compareEvents);
 
   const seen = new Set();

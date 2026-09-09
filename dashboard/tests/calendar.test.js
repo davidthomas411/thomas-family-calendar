@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('../api/calendar'), 'utf8');
 function load(fetch) {
   const context = { module: {exports: {}}, require: () => ({loadJsonCache: async () => null, saveJsonCache: async () => true}), fetch, URL, AbortSignal };
-  vm.runInNewContext(source + '\nmodule.exports.testing = {parseCalendarEvents, fetchSourceEvents};', context);
+  vm.runInNewContext(source + '\nmodule.exports.testing = {CALENDAR_SOURCES, parseCalendarEvents, fetchSourceEvents};', context);
   return context.module.exports;
 }
 const ics = lines => ['BEGIN:VCALENDAR', ...lines, 'END:VCALENDAR'].join('\r\n');
@@ -32,4 +32,16 @@ test('partial source failure is not saved as a complete calendar and uses no pro
   const api = load(async () => { calls++; return {ok:false}; });
   await assert.rejects(api.testing.fetchSourceEvents({url:'https://example.com'},'hockey'));
   assert.equal(calls, 1);
+});
+test('K Lady Dragons developmental sessions cover all ten Saturday mornings', async () => {
+  const api = load(async () => ({ok: true, text: async () => ics([])}));
+  const events = await api.testing.fetchSourceEvents(api.testing.CALENDAR_SOURCES.hockey, 'hockey');
+  const sessions = events.filter(event => event.uid.startsWith('lady-dragons-developmental-2026-'));
+  assert.equal(sessions.length, 10);
+  assert.deepEqual(Array.from(sessions, event => event.startDate), [
+    '2026-09-19','2026-10-10','2026-10-24','2026-11-07','2026-11-21',
+    '2026-12-12','2026-12-19','2027-01-09','2027-01-23','2027-02-27',
+  ]);
+  assert.ok(sessions.every(event => event.startTime === '08:00' && event.endTime === '09:00'));
+  assert.ok(sessions.every(event => new Date(`${event.startDate}T12:00:00`).getDay() === 6));
 });
